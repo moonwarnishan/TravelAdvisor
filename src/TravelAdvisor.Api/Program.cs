@@ -29,6 +29,18 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<TravelAdvisorDbContext>();
+    await dbContext.Database.MigrateAsync();
+
+    var districtSyncJob = scope.ServiceProvider.GetRequiredService<DistrictSyncJob>();
+    await districtSyncJob.SyncDistrictsAsync();
+
+    var cacheWarmingJob = scope.ServiceProvider.GetRequiredService<CacheWarmingJob>();
+    await cacheWarmingJob.WarmupCacheAsync();
+}
+
 var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 if (!string.IsNullOrWhiteSpace(redisConnectionString))
 {
@@ -37,18 +49,26 @@ if (!string.IsNullOrWhiteSpace(redisConnectionString))
         DashboardTitle = "Travel Advisor - Background Jobs"
     });
 
-    var cronSchedule = builder.Configuration.GetValue<string>("CacheSettings:CacheWarmingCronSchedule") ?? "*/15 * * * *";
+    var cacheWarmingSchedule = builder.Configuration.GetValue<string>("CacheSettings:CacheWarmingCronSchedule") ?? "*/15 * * * *";
+    var districtSyncSchedule = builder.Configuration.GetValue<string>("CacheSettings:DistrictSyncCronSchedule") ?? "0 0 1 * *";
 
     RecurringJob.AddOrUpdate<CacheWarmingJob>(
         "cache-warmup",
         job => job.WarmupCacheAsync(),
-        cronSchedule,
+        cacheWarmingSchedule,
         new RecurringJobOptions
         {
             TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Dhaka")
         });
 
-    BackgroundJob.Enqueue<CacheWarmingJob>(job => job.WarmupCacheAsync());
+    RecurringJob.AddOrUpdate<DistrictSyncJob>(
+        "district-sync",
+        job => job.SyncDistrictsAsync(),
+        districtSyncSchedule,
+        new RecurringJobOptions
+        {
+            TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Dhaka")
+        });
 }
 
 if (app.Environment.IsDevelopment())

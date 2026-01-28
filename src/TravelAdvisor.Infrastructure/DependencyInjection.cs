@@ -1,6 +1,8 @@
 using Hangfire.Redis.StackExchange;
+using Microsoft.EntityFrameworkCore;
 using TravelAdvisor.Infrastructure.Caching;
 using TravelAdvisor.Infrastructure.ExternalApis;
+using TravelAdvisor.Infrastructure.Persistence;
 
 namespace TravelAdvisor.Infrastructure;
 
@@ -15,6 +17,13 @@ public static class DependencyInjection
 
         services.AddAutoMapper(assembly);
 
+        var postgresConnectionString = configuration.GetConnectionString("PostgreSQL");
+        if (!string.IsNullOrWhiteSpace(postgresConnectionString))
+        {
+            services.AddDbContext<TravelAdvisorDbContext>(options =>
+                options.UseNpgsql(postgresConnectionString));
+        }
+
         services.AddSingleton<ICacheService, RedisCacheService>();
 
         services.AddHttpClient<IDistrictService, DistrictService>();
@@ -22,6 +31,7 @@ public static class DependencyInjection
         services.AddHttpClient<IAirQualityService, AirQualityService>();
 
         services.AddScoped<CacheWarmingJob>();
+        services.AddScoped<DistrictSyncJob>();
 
         var redisConnectionString = configuration.GetConnectionString("Redis");
         if (!string.IsNullOrWhiteSpace(redisConnectionString))

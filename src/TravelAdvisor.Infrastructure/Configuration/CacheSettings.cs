@@ -10,4 +10,5 @@ public sealed class CacheSettings
     public int WeatherCacheMinutes { get; init; } = 30;
     public int AirQualityCacheMinutes { get; init; } = 30;
     public string CacheWarmingCronSchedule { get; init; } = "*/15 * * * *";
+    public string DistrictSyncCronSchedule { get; init; } = "0 0 1 * *";
 }

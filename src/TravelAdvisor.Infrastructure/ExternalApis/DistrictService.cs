@@ -1,8 +1,12 @@
+using Microsoft.EntityFrameworkCore;
+using TravelAdvisor.Infrastructure.Persistence;
+
 namespace TravelAdvisor.Infrastructure.ExternalApis;
 
 public sealed class DistrictService(
     HttpClient httpClient,
     ICacheService cacheService,
+    TravelAdvisorDbContext dbContext,
     IMapper mapper,
     IOptions<ApiSettings> apiSettings,
     ILogger<DistrictService> logger) : IDistrictService
@@ -19,6 +23,14 @@ public sealed class DistrictService(
             return cached;
         }
 
+        var dbDistricts = await dbContext.Districts.ToListAsync(cancellationToken);
+        if (dbDistricts.Count > 0)
+        {
+            logger.LogDebug("Retrieved {Count} districts from database", dbDistricts.Count);
+            await cacheService.SetAsync(Constants.CacheKeys.AllDistricts, dbDistricts, CacheExpiration, cancellationToken);
+            return dbDistricts;
+        }
+
         logger.LogInformation("Fetching districts from remote source");
         var response = await httpClient.GetStringAsync(_apiSettings.DistrictsUrl, cancellationToken);
         var data = JsonSerializer.Deserialize<DistrictListApiModel>(response);
@@ -30,6 +42,10 @@ public sealed class DistrictService(
         }
 
         var districts = mapper.Map<List<District>>(data.Districts);
+
+        await dbContext.Districts.AddRangeAsync(districts, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Saved {Count} districts to database", districts.Count);
 
         await cacheService.SetAsync(Constants.CacheKeys.AllDistricts, districts, CacheExpiration, cancellationToken);
         return districts;

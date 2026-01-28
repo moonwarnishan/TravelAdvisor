@@ -2,15 +2,21 @@ namespace TravelAdvisor.Application.Common.Validators;
 
 public sealed class TravelRecommendationRequestValidator : AbstractValidator<TravelRecommendationRequest>
 {
+    // Bangladesh geographic boundaries
+    private const double MinLatitude = 20.5;
+    private const double MaxLatitude = 26.7;
+    private const double MinLongitude = 88.0;
+    private const double MaxLongitude = 92.7;
+
     public TravelRecommendationRequestValidator()
     {
         RuleFor(x => x.CurrentLatitude)
-            .InclusiveBetween(-90, 90)
-            .WithMessage("Latitude must be between -90 and 90");
+            .InclusiveBetween(MinLatitude, MaxLatitude)
+            .WithMessage($"Latitude must be within Bangladesh bounds ({MinLatitude} to {MaxLatitude})");
 
         RuleFor(x => x.CurrentLongitude)
-            .InclusiveBetween(-180, 180)
-            .WithMessage("Longitude must be between -180 and 180");
+            .InclusiveBetween(MinLongitude, MaxLongitude)
+            .WithMessage($"Longitude must be within Bangladesh bounds ({MinLongitude} to {MaxLongitude})");
 
         RuleFor(x => x.DestinationDistrict)
             .NotEmpty()
