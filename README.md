@@ -63,7 +63,7 @@ sudo apt-get install -y dotnet-sdk-10.0
 
 ### 1.2 Docker Desktop
 
-Docker is required to run Redis (the caching database).
+Docker is required to run Redis (caching) and PostgreSQL (database).
 
 **For macOS:**
 1. Go to https://www.docker.com/products/docker-desktop/
@@ -165,7 +165,7 @@ If you see errors, make sure you have .NET 10.0 SDK installed.
 
 ## Running the Application
 
-### Step 1: Start Redis Database
+### Step 1: Start Docker Services (Redis & PostgreSQL)
 
 Open a terminal and navigate to the project root folder (where `docker-compose.yml` is located):
 
@@ -174,32 +174,46 @@ docker-compose up -d
 ```
 
 **What this does:**
-- Downloads the Redis image (first time only)
-- Starts a Redis container named `traveladvisor-redis`
-- Redis will be available at `localhost:6379`
+- Downloads Redis and PostgreSQL images (first time only)
+- Starts a Redis container named `traveladvisor-redis` at `localhost:6379`
+- Starts a PostgreSQL container named `traveladvisor-postgres` at `localhost:5432`
+- Creates persistent volumes for data storage
 
-**Verify Redis is running:**
+**Verify services are running:**
 ```bash
 docker ps
 ```
 
 You should see:
 ```
-CONTAINER ID   IMAGE          STATUS         PORTS                    NAMES
-xxxxxxxxxxxx   redis:alpine   Up X seconds   0.0.0.0:6379->6379/tcp   traveladvisor-redis
+CONTAINER ID   IMAGE               STATUS         PORTS                    NAMES
+xxxxxxxxxxxx   redis:alpine        Up X seconds   0.0.0.0:6379->6379/tcp   traveladvisor-redis
+xxxxxxxxxxxx   postgres:16-alpine  Up X seconds   0.0.0.0:5432->5432/tcp   traveladvisor-postgres
 ```
 
 ### Step 2: Start the API
 
-Open a **new terminal window** (keep Redis running in the background):
+Open a **new terminal window** (keep Docker services running in the background):
 
 ```bash
 cd src/TravelAdvisor.Api
 dotnet run
 ```
 
+**What happens on startup:**
+1. Database migrations run automatically (creates tables in PostgreSQL)
+2. District sync job runs (fetches 64 Bangladesh districts and stores in DB)
+3. Cache warming job runs (pre-loads all data into Redis)
+4. API starts accepting requests (all data ready, instant responses)
+
 **Expected output:**
 ```
+info: TravelAdvisor.Infrastructure.BackgroundJobs.DistrictSyncJob
+      Starting district sync job
+info: TravelAdvisor.Infrastructure.BackgroundJobs.DistrictSyncJob
+      District sync completed. Added 64 districts.
+info: TravelAdvisor.Infrastructure.BackgroundJobs.CacheWarmingJob
+      Cache warming completed successfully
 info: Microsoft.Hosting.Lifetime[14]
       Now listening on: http://localhost:5155
 info: Microsoft.Hosting.Lifetime[0]
@@ -276,8 +290,8 @@ POST /api/v1/Travel/recommendation
 **Request Body:**
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| currentLatitude | double | Yes | Your current latitude (-90 to 90) |
-| currentLongitude | double | Yes | Your current longitude (-180 to 180) |
+| currentLatitude | double | Yes | Your current latitude (20.5 to 26.7 - Bangladesh bounds) |
+| currentLongitude | double | Yes | Your current longitude (88.0 to 92.7 - Bangladesh bounds) |
 | destinationDistrict | string | Yes | Name of destination district in Bangladesh |
 | travelDate | string | Yes | Travel date (YYYY-MM-DD, within next 7 days) |
 
@@ -342,15 +356,16 @@ curl -X POST http://localhost:5155/api/v1/Travel/recommendation \
 ### Stop the API
 Press `Ctrl+C` in the terminal where the API is running.
 
-### Stop Redis
+### Stop Docker Services (Redis & PostgreSQL)
 ```bash
 docker-compose down
 ```
 
-### Stop Redis and remove data
+### Stop Docker Services and remove all data
 ```bash
 docker-compose down -v
 ```
+**Warning:** This removes all cached data and the district database. On next startup, districts will be re-fetched from the external API.
 
 ---
 
@@ -360,11 +375,14 @@ docker-compose down -v
 |---------|----------|
 | "Docker command not found" | Install Docker Desktop from https://docker.com and make sure it's running |
 | "Port 6379 is already in use" | Run `docker stop traveladvisor-redis && docker rm traveladvisor-redis` then `docker-compose up -d` |
+| "Port 5432 is already in use" | Run `docker stop traveladvisor-postgres && docker rm traveladvisor-postgres` then `docker-compose up -d` |
 | "Port 5155 is already in use" | Stop the other application or change port in `launchSettings.json` |
 | "dotnet: command not found" | Install .NET 10.0 SDK from https://dotnet.microsoft.com/download/dotnet/10.0 |
 | "Build failed with errors" | Run `dotnet restore` then `dotnet build` |
 | "Redis connection failed" | Run `docker ps` to check if Redis is running, if not run `docker-compose up -d` |
-| API returns empty data | Wait 15 seconds for cache warming job to complete |
+| "PostgreSQL connection refused" | Run `docker ps` to check if PostgreSQL is running, if not run `docker-compose up -d` |
+| API returns empty data | Wait for startup to complete (district sync + cache warming) |
+| "Latitude/Longitude validation error" | Coordinates must be within Bangladesh bounds (Lat: 20.5-26.7, Long: 88.0-92.7) |
 
 ---
 
@@ -380,7 +398,7 @@ This project follows **Clean Architecture** (also known as Onion Architecture), 
 │              (Controllers, Middleware, Configuration)        │
 ├─────────────────────────────────────────────────────────────┤
 │                   Infrastructure Layer                       │
-│         (Redis, HTTP Clients, Hangfire, External APIs)      │
+│    (PostgreSQL, Redis, HTTP Clients, Hangfire, EF Core)     │
 ├─────────────────────────────────────────────────────────────┤
 │                    Application Layer                         │
 │            (CQRS Handlers, DTOs, Validators, Services)      │
@@ -434,11 +452,13 @@ TravelAdvisor/
     │       └── TravelRecommendation/
     │
     ├── TravelAdvisor.Infrastructure/  # External services layer
-    │   ├── BackgroundJobs/            # Hangfire jobs
+    │   ├── BackgroundJobs/            # Hangfire jobs (CacheWarming, DistrictSync)
     │   ├── Caching/                   # Redis cache service
     │   ├── Configuration/             # Settings classes
     │   ├── ExternalApis/              # HTTP clients for external APIs
-    │   └── Mapping/                   # AutoMapper profiles
+    │   ├── Mapping/                   # AutoMapper profiles
+    │   ├── Migrations/                # EF Core database migrations
+    │   └── Persistence/               # DbContext and database entities
     │
     └── TravelAdvisor.Api/             # Web API layer
         ├── Controllers/               # API endpoints
@@ -498,14 +518,22 @@ TravelAdvisor/
 └────────┘    └────────────┘    └───────────┘    └─────────────┘    └───────────┘
 ```
 
-### Caching Strategy
+### Data Storage Strategy
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                        Cache Warming Job                             │
-│                    (Runs every 15 minutes)                          │
+│                    District Sync Job (Monthly)                       │
 ├─────────────────────────────────────────────────────────────────────┤
 │  1. Fetch all 64 districts from external API                        │
+│  2. Store districts in PostgreSQL database                          │
+│  (Static data - districts rarely change)                            │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  Cache Warming Job (Every 15 min)                    │
+├─────────────────────────────────────────────────────────────────────┤
+│  1. Read districts from PostgreSQL                                  │
 │  2. Fetch weather data for all districts (batch API call)           │
 │  3. Fetch air quality data for all districts (batch API call)       │
 │  4. Store everything in Redis cache                                 │
@@ -516,9 +544,9 @@ TravelAdvisor/
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         API Request                                  │
 ├─────────────────────────────────────────────────────────────────────┤
-│  1. Check Redis cache for data                                      │
-│  2. If found → Return instantly (< 50ms)                            │
-│  3. If not found → Fetch from external API → Cache → Return         │
+│  1. Read from Redis cache only (< 50ms response)                    │
+│  2. All data pre-loaded by background jobs                          │
+│  3. No external API calls during user requests                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -559,21 +587,45 @@ TravelAdvisor/
 |---------|---------|-------------|
 | Hangfire.Core | 1.8.22 | Background job processing |
 | Hangfire.Redis.StackExchange | 1.12.0 | Redis storage for Hangfire |
+| Microsoft.EntityFrameworkCore | 10.0.0 | ORM for database access |
 | Microsoft.Extensions.Http | 10.0.2 | HTTP client factory |
 | Microsoft.Extensions.Options.ConfigurationExtensions | 10.0.2 | Strongly-typed configuration |
+| Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.0 | PostgreSQL provider for EF Core |
 | StackExchange.Redis | 2.10.1 | Redis client library |
 
 ### External Services
 
 | Service | Description |
 |---------|-------------|
-| Redis | In-memory cache database |
+| PostgreSQL | Relational database for persistent district storage |
+| Redis | In-memory cache for fast API responses |
 | Open-Meteo Weather API | Free weather forecast data |
 | Open-Meteo Air Quality API | Free air quality data |
 
 ---
 
 ## Why These Technologies
+
+### PostgreSQL
+
+**What is it?**
+PostgreSQL is a powerful, open-source relational database system known for reliability and data integrity.
+
+**Why we use it:**
+| Reason | Explanation |
+|--------|-------------|
+| **Data Persistence** | District data survives container restarts |
+| **ACID Compliance** | Guarantees data consistency and integrity |
+| **Entity Framework Core** | Seamless integration with .NET via EF Core |
+| **Reliability** | Production-grade database trusted by enterprises |
+
+**How it helps:**
+```
+Without PostgreSQL:  Districts fetched from external API on every restart
+With PostgreSQL:     Districts stored locally, API called only monthly
+```
+
+---
 
 ### Redis
 
@@ -632,9 +684,14 @@ A library for building strongly-typed validation rules for request objects.
 
 **Example:**
 ```csharp
+// Validates coordinates are within Bangladesh boundaries
 RuleFor(x => x.CurrentLatitude)
-    .InclusiveBetween(-90, 90)
-    .WithMessage("Latitude must be between -90 and 90");
+    .InclusiveBetween(20.5, 26.7)
+    .WithMessage("Latitude must be within Bangladesh bounds (20.5 to 26.7)");
+
+RuleFor(x => x.CurrentLongitude)
+    .InclusiveBetween(88.0, 92.7)
+    .WithMessage("Longitude must be within Bangladesh bounds (88.0 to 92.7)");
 ```
 
 **How it helps:**
@@ -733,7 +790,8 @@ A way to maintain multiple versions of an API simultaneously.
   },
   "AllowedHosts": "*",
   "ConnectionStrings": {
-    "Redis": "localhost:6379"
+    "Redis": "localhost:6379",
+    "PostgreSQL": "Host=localhost;Port=5432;Database=traveladvisor;Username=traveladvisor;Password=traveladvisor123"
   },
   "ApiSettings": {
     "DistrictsUrl": "https://raw.githubusercontent.com/strativ-dev/technical-screening-test/main/bd-districts.json",
@@ -745,7 +803,8 @@ A way to maintain multiple versions of an API simultaneously.
     "DistrictsCacheHours": 24,
     "WeatherCacheMinutes": 30,
     "AirQualityCacheMinutes": 30,
-    "CacheWarmingCronSchedule": "*/15 * * * *"
+    "CacheWarmingCronSchedule": "*/15 * * * *",
+    "DistrictSyncCronSchedule": "0 0 1 * *"
   }
 }
 ```
@@ -755,6 +814,7 @@ A way to maintain multiple versions of an API simultaneously.
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `ConnectionStrings:Redis` | Redis server connection string | `localhost:6379` |
+| `ConnectionStrings:PostgreSQL` | PostgreSQL server connection string | `Host=localhost;Port=5432;...` |
 | `ApiSettings:DistrictsUrl` | URL to fetch Bangladesh districts | GitHub raw URL |
 | `ApiSettings:WeatherApiBaseUrl` | Open-Meteo weather API base URL | `https://api.open-meteo.com/v1/forecast` |
 | `ApiSettings:AirQualityApiBaseUrl` | Open-Meteo air quality API base URL | `https://air-quality-api.open-meteo.com/v1/air-quality` |
@@ -763,6 +823,7 @@ A way to maintain multiple versions of an API simultaneously.
 | `CacheSettings:WeatherCacheMinutes` | How long to cache weather data | 30 minutes |
 | `CacheSettings:AirQualityCacheMinutes` | How long to cache air quality data | 30 minutes |
 | `CacheSettings:CacheWarmingCronSchedule` | How often to run cache warming job | Every 15 minutes |
+| `CacheSettings:DistrictSyncCronSchedule` | How often to sync districts from API to DB | Monthly (1st of month) |
 
 ### Cron Schedule Format
 
@@ -782,10 +843,11 @@ The `CacheWarmingCronSchedule` uses standard cron format:
 **Examples:**
 | Schedule | Meaning |
 |----------|---------|
-| `*/15 * * * *` | Every 15 minutes |
+| `*/15 * * * *` | Every 15 minutes (cache warming) |
 | `0 * * * *` | Every hour |
 | `0 0 * * *` | Every day at midnight |
 | `0 */6 * * *` | Every 6 hours |
+| `0 0 1 * *` | First day of every month at midnight (district sync) |
 
 ---
 
@@ -796,5 +858,18 @@ If you encounter any issues:
 1. Check the **Hangfire Dashboard** at `/hangfire` for background job errors
 2. Check the **application logs** in the terminal
 3. Check **Redis logs**: `docker logs traveladvisor-redis`
-4. Verify **Redis is running**: `docker ps`
-5. Verify **.NET version**: `dotnet --version` (should be 10.0.x)
+4. Check **PostgreSQL logs**: `docker logs traveladvisor-postgres`
+5. Verify **Docker services are running**: `docker ps`
+6. Verify **.NET version**: `dotnet --version` (should be 10.0.x)
+
+### Database Management
+
+**View districts in PostgreSQL:**
+```bash
+docker exec -it traveladvisor-postgres psql -U traveladvisor -d traveladvisor -c "SELECT * FROM districts LIMIT 5;"
+```
+
+**Reset database (re-fetch districts on next startup):**
+```bash
+docker-compose down -v && docker-compose up -d
+```
