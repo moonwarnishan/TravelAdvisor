@@ -25,6 +25,13 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+var postgresConnectionString = builder.Configuration.GetConnectionString("PostgreSQL");
+
+builder.Services.AddHealthChecks()
+    .AddRedis(redisConnectionString!, name: "redis", tags: ["ready"])
+    .AddNpgSql(postgresConnectionString!, name: "postgresql", tags: ["ready"]);
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
@@ -41,7 +48,6 @@ using (var scope = app.Services.CreateScope())
     await cacheWarmingJob.WarmupCacheAsync();
 }
 
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
 if (!string.IsNullOrWhiteSpace(redisConnectionString))
 {
     app.UseHangfireDashboard("/hangfire", new DashboardOptions
@@ -85,4 +91,32 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 app.MapControllers();
 
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = WriteHealthCheckResponse
+});
+
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready"),
+    ResponseWriter = WriteHealthCheckResponse
+});
+
 app.Run();
+
+static Task WriteHealthCheckResponse(HttpContext context, HealthReport report)
+{
+    context.Response.ContentType = "application/json";
+    var result = new
+    {
+        status = report.Status.ToString(),
+        checks = report.Entries.Select(e => new
+        {
+            name = e.Key,
+            status = e.Value.Status.ToString(),
+            duration = e.Value.Duration.TotalMilliseconds
+        })
+    };
+    return context.Response.WriteAsJsonAsync(result);
+}

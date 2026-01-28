@@ -4,6 +4,8 @@ global using FluentValidation;
 global using Hangfire;
 global using MediatR;
 global using Microsoft.AspNetCore.Diagnostics;
+global using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+global using Microsoft.Extensions.Diagnostics.HealthChecks;
 global using Microsoft.AspNetCore.Mvc;
 global using Microsoft.EntityFrameworkCore;
 global using TravelAdvisor.Api.Middleware;
