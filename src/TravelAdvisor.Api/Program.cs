@@ -29,6 +29,28 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        DashboardTitle = "Travel Advisor - Background Jobs"
+    });
+
+    var cronSchedule = builder.Configuration.GetValue<string>("CacheSettings:CacheWarmingCronSchedule") ?? "*/15 * * * *";
+
+    RecurringJob.AddOrUpdate<CacheWarmingJob>(
+        "cache-warmup",
+        job => job.WarmupCacheAsync(),
+        cronSchedule,
+        new RecurringJobOptions
+        {
+            TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Dhaka")
+        });
+
+    BackgroundJob.Enqueue<CacheWarmingJob>(job => job.WarmupCacheAsync());
+}
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

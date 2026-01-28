@@ -9,4 +9,5 @@ public sealed class CacheSettings
     public int DistrictsCacheHours { get; init; } = 24;
     public int WeatherCacheMinutes { get; init; } = 30;
     public int AirQualityCacheMinutes { get; init; } = 30;
+    public string CacheWarmingCronSchedule { get; init; } = "*/15 * * * *";
 }

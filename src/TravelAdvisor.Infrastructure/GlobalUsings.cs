@@ -1,6 +1,7 @@
 global using System.Text.Json;
 global using System.Text.Json.Serialization;
 global using AutoMapper;
+global using Hangfire;
 global using Microsoft.Extensions.Configuration;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Logging;
@@ -9,5 +10,6 @@ global using StackExchange.Redis;
 global using TravelAdvisor.Application.Common.Interfaces;
 global using TravelAdvisor.Domain.Common;
 global using TravelAdvisor.Domain.Entities;
+global using TravelAdvisor.Infrastructure.BackgroundJobs;
 global using TravelAdvisor.Infrastructure.Configuration;
 global using TravelAdvisor.Infrastructure.ExternalApis.Models;

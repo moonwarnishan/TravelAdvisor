@@ -1,6 +1,7 @@
 global using System.Text.Json;
 global using Asp.Versioning;
 global using FluentValidation;
+global using Hangfire;
 global using MediatR;
 global using Microsoft.AspNetCore.Diagnostics;
 global using Microsoft.AspNetCore.Mvc;
@@ -12,5 +13,6 @@ global using TravelAdvisor.Application.DTOs.Requests;
 global using TravelAdvisor.Application.Features.TopDistricts;
 global using TravelAdvisor.Application.Features.TravelRecommendation;
 global using TravelAdvisor.Infrastructure;
+global using TravelAdvisor.Infrastructure.BackgroundJobs;
 global using ValidationException = TravelAdvisor.Domain.Exceptions.ValidationException;
 global using DomainException = TravelAdvisor.Domain.Exceptions.DomainException;
