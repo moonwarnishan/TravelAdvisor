@@ -1,0 +1,57 @@
+# Build results
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+publish/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.csproj.user
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+nuget.config
+
+# OS generated
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local settings
+appsettings.Development.json
+appsettings.*.local.json
+.env
+.env.*
+
+# Temp files
+*.swp
+*~
+*.tmp
+
+# Test results
+TestResults/
+coverage/
+*.coverage

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TravelAdvisor.Api/TravelAdvisor.Api.csproj" />
+    <Project Path="src/TravelAdvisor.Application/TravelAdvisor.Application.csproj" />
+    <Project Path="src/TravelAdvisor.Domain/TravelAdvisor.Domain.csproj" />
+    <Project Path="src/TravelAdvisor.Infrastructure/TravelAdvisor.Infrastructure.csproj" />
+  </Folder>
+</Solution>
