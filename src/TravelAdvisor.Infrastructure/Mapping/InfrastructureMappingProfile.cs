@@ -1,7 +1,3 @@
-using AutoMapper;
-using TravelAdvisor.Domain.Entities;
-using TravelAdvisor.Infrastructure.ExternalApis.Models;
-
 namespace TravelAdvisor.Infrastructure.Mapping;
 
 public sealed class InfrastructureMappingProfile : Profile

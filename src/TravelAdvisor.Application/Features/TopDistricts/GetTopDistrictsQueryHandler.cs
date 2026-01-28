@@ -1,11 +1,3 @@
-using AutoMapper;
-using MediatR;
-using Microsoft.Extensions.Logging;
-using TravelAdvisor.Application.Common.Interfaces;
-using TravelAdvisor.Application.DTOs.Districts;
-using TravelAdvisor.Domain.Common;
-using TravelAdvisor.Domain.Entities;
-
 namespace TravelAdvisor.Application.Features.TopDistricts;
 
 public sealed class GetTopDistrictsQueryHandler(

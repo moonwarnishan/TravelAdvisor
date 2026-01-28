@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace TravelAdvisor.Infrastructure.ExternalApis.Models;
 
 public sealed class AirQualityApiModel

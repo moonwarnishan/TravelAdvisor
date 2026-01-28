@@ -1,7 +1,3 @@
-using FluentValidation;
-using TravelAdvisor.Application.DTOs.Requests;
-using TravelAdvisor.Domain.Common;
-
 namespace TravelAdvisor.Application.Common.Validators;
 
 public sealed class GetTopDistrictsRequestValidator : AbstractValidator<GetTopDistrictsRequest>

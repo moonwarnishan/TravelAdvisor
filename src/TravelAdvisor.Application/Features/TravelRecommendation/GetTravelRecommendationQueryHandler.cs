@@ -1,10 +1,3 @@
-using AutoMapper;
-using MediatR;
-using TravelAdvisor.Application.Common.Interfaces;
-using TravelAdvisor.Application.DTOs.Districts;
-using TravelAdvisor.Domain.Common;
-using TravelAdvisor.Domain.Entities;
-
 namespace TravelAdvisor.Application.Features.TravelRecommendation;
 
 public sealed class GetTravelRecommendationQueryHandler(

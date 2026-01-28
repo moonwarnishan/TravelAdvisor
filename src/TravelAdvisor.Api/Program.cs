@@ -1,8 +1,3 @@
-using Asp.Versioning;
-using TravelAdvisor.Api.Middleware;
-using TravelAdvisor.Application;
-using TravelAdvisor.Infrastructure;
-
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();

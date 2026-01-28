@@ -1,7 +1,3 @@
-using AutoMapper;
-using TravelAdvisor.Application.DTOs.Districts;
-using TravelAdvisor.Domain.Entities;
-
 namespace TravelAdvisor.Application.Common.Mapping;
 
 public sealed class ApplicationMappingProfile : Profile

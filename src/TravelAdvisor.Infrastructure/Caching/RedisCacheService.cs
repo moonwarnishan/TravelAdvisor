@@ -1,9 +1,3 @@
-using System.Text.Json;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using StackExchange.Redis;
-using TravelAdvisor.Application.Common.Interfaces;
-
 namespace TravelAdvisor.Infrastructure.Caching;
 
 public sealed class RedisCacheService : ICacheService, IDisposable

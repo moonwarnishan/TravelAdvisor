@@ -1,8 +1,3 @@
-using System.Text.Json;
-using Microsoft.AspNetCore.Diagnostics;
-using TravelAdvisor.Application.Common.Models;
-using TravelAdvisor.Domain.Exceptions;
-
 namespace TravelAdvisor.Api.Middleware;
 
 public sealed class GlobalExceptionHandler(

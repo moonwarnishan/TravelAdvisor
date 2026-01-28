@@ -1,5 +1,3 @@
-using TravelAdvisor.Domain.Common;
-
 namespace TravelAdvisor.Application.DTOs.Requests;
 
 public sealed class GetTopDistrictsRequest

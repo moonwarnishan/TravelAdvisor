@@ -1,5 +1,3 @@
-using TravelAdvisor.Domain.Entities;
-
 namespace TravelAdvisor.Application.Common.Interfaces;
 
 public interface IDistrictService

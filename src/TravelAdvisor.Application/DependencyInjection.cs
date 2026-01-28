@@ -1,6 +1,3 @@
-using FluentValidation;
-using Microsoft.Extensions.DependencyInjection;
-
 namespace TravelAdvisor.Application;
 
 public static class DependencyInjection

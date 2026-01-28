@@ -1,12 +1,3 @@
-using System.Text.Json;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using TravelAdvisor.Application.Common.Interfaces;
-using TravelAdvisor.Domain.Common;
-using TravelAdvisor.Domain.Entities;
-using TravelAdvisor.Infrastructure.Configuration;
-using TravelAdvisor.Infrastructure.ExternalApis.Models;
-
 namespace TravelAdvisor.Infrastructure.ExternalApis;
 
 public sealed class WeatherService(

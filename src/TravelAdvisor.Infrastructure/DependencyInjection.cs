@@ -1,8 +1,4 @@
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using TravelAdvisor.Application.Common.Interfaces;
 using TravelAdvisor.Infrastructure.Caching;
-using TravelAdvisor.Infrastructure.Configuration;
 using TravelAdvisor.Infrastructure.ExternalApis;
 
 namespace TravelAdvisor.Infrastructure;

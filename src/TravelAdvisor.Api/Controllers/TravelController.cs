@@ -1,14 +1,3 @@
-using Asp.Versioning;
-using FluentValidation;
-using MediatR;
-using Microsoft.AspNetCore.Mvc;
-using TravelAdvisor.Application.Common.Models;
-using TravelAdvisor.Application.DTOs.Districts;
-using TravelAdvisor.Application.DTOs.Requests;
-using TravelAdvisor.Application.Features.TopDistricts;
-using TravelAdvisor.Application.Features.TravelRecommendation;
-using ValidationException = TravelAdvisor.Domain.Exceptions.ValidationException;
-
 namespace TravelAdvisor.Api.Controllers;
 
 [ApiController]
