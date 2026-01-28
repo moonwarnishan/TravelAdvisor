@@ -35,5 +35,8 @@ public static class Constants
     {
         public const string Recommended = "Recommended";
         public const string NotRecommended = "Not Recommended";
+        public const string AlreadyNearDestination = "You are already at or near your destination. No travel needed!";
+        public const string CoolerAndBetterAirTemplate = "Your destination is {0}°C cooler and has significantly better air quality. Enjoy your trip!";
+        public const string HotterAndWorseAir = "Your destination is hotter and has worse air quality than your current location. It's better to stay where you are.";
     }
 }

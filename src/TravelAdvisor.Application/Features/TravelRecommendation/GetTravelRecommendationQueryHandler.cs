@@ -8,11 +8,14 @@ public sealed class GetTravelRecommendationQueryHandler(
 {
     public async Task<TravelRecommendationResponse> Handle(GetTravelRecommendationQuery request, CancellationToken cancellationToken)
     {
+        var currentLocation = await districtService.GetNearestDistrictAsync(request.CurrentLatitude, request.CurrentLongitude, cancellationToken)
+            ?? throw new InvalidOperationException("Unable to find nearest district for current location.");
+
         var destination = await districtService.GetDistrictByNameAsync(request.DestinationDistrict, cancellationToken)
             ?? throw new ArgumentException($"District '{request.DestinationDistrict}' not found.");
 
-        var currentWeatherTask = weatherService.GetWeatherAsync(request.CurrentLatitude, request.CurrentLongitude, cancellationToken);
-        var currentAirQualityTask = airQualityService.GetAirQualityAsync(request.CurrentLatitude, request.CurrentLongitude, cancellationToken);
+        var currentWeatherTask = weatherService.GetWeatherAsync(currentLocation.Latitude, currentLocation.Longitude, cancellationToken);
+        var currentAirQualityTask = airQualityService.GetAirQualityAsync(currentLocation.Latitude, currentLocation.Longitude, cancellationToken);
         var destWeatherTask = weatherService.GetWeatherAsync(destination.Latitude, destination.Longitude, cancellationToken);
         var destAirQualityTask = airQualityService.GetAirQualityAsync(destination.Latitude, destination.Longitude, cancellationToken);
 
@@ -33,11 +36,18 @@ public sealed class GetTravelRecommendationQueryHandler(
             throw new InvalidOperationException("Weather data not available for the specified travel date.");
         }
 
+        var isSameDistrict = currentLocation.Name.Equals(destination.Name, StringComparison.OrdinalIgnoreCase);
+        var tempDifference = Math.Round(currentTemp.Value - destTemp.Value, 1);
         var isCooler = destTemp.Value < currentTemp.Value;
         var isBetterAir = destPm25.Value < currentPm25.Value;
-        var tempDifference = Math.Round(currentTemp.Value - destTemp.Value, 1);
 
-        var (recommendation, reason) = GenerateRecommendation(isCooler, isBetterAir, tempDifference, currentPm25.Value, destPm25.Value);
+        var (recommendation, reason) = GenerateRecommendation(isSameDistrict, isCooler, isBetterAir, tempDifference);
+
+        var currentLocationDto = mapper.Map<LocationComparisonDto>(currentLocation) with
+        {
+            TemperatureAt2pm = Math.Round(currentTemp.Value, 2),
+            Pm25Level = Math.Round(currentPm25.Value, 2)
+        };
 
         var destinationDto = mapper.Map<LocationComparisonDto>(destination) with
         {
@@ -49,14 +59,7 @@ public sealed class GetTravelRecommendationQueryHandler(
         {
             Recommendation = recommendation,
             Reason = reason,
-            CurrentLocation = new LocationComparisonDto
-            {
-                Name = "Current Location",
-                Latitude = request.CurrentLatitude,
-                Longitude = request.CurrentLongitude,
-                TemperatureAt2pm = Math.Round(currentTemp.Value, 2),
-                Pm25Level = Math.Round(currentPm25.Value, 2)
-            },
+            CurrentLocation = currentLocationDto,
             Destination = destinationDto
         };
     }
@@ -77,43 +80,22 @@ public sealed class GetTravelRecommendationQueryHandler(
     }
 
     private static (string Recommendation, string Reason) GenerateRecommendation(
+        bool isSameDistrict,
         bool isCooler,
         bool isBetterAir,
-        double tempDifference,
-        double currentPm25,
-        double destPm25)
+        double tempDifference)
     {
+        if (isSameDistrict)
+        {
+            return (Constants.Recommendations.Recommended, Constants.Recommendations.AlreadyNearDestination);
+        }
+
         if (isCooler && isBetterAir)
         {
-            var airQualityDesc = destPm25 < currentPm25 * 0.7 ? "significantly better" : "better";
             return (Constants.Recommendations.Recommended,
-                $"Your destination is {Math.Abs(tempDifference)}°C cooler and has {airQualityDesc} air quality. Enjoy your trip!");
+                string.Format(Constants.Recommendations.CoolerAndBetterAirTemplate, Math.Abs(tempDifference)));
         }
 
-        if (isCooler && !isBetterAir)
-        {
-            var pm25Diff = destPm25 - currentPm25;
-            if (pm25Diff < 10)
-            {
-                return (Constants.Recommendations.Recommended,
-                    $"Your destination is {Math.Abs(tempDifference)}°C cooler with slightly higher PM2.5 levels. The temperature benefit may outweigh the minor air quality difference.");
-            }
-            return (Constants.Recommendations.NotRecommended,
-                $"Your destination is {Math.Abs(tempDifference)}°C cooler but has worse air quality (PM2.5: {destPm25:F1} vs {currentPm25:F1}). Consider the air quality trade-off.");
-        }
-
-        if (!isCooler && isBetterAir)
-        {
-            if (Math.Abs(tempDifference) < 2)
-            {
-                return (Constants.Recommendations.Recommended,
-                    "Your destination has better air quality with similar temperature. A good choice for cleaner air!");
-            }
-            return (Constants.Recommendations.NotRecommended,
-                $"Your destination is {Math.Abs(tempDifference)}°C warmer but has better air quality. Consider if the air quality improvement is worth the higher temperature.");
-        }
-
-        return (Constants.Recommendations.NotRecommended,
-            "Your destination is hotter and has worse air quality than your current location. It's better to stay where you are.");
+        return (Constants.Recommendations.NotRecommended, Constants.Recommendations.HotterAndWorseAir);
     }
 }
