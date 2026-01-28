@@ -1,5 +1,7 @@
 using Hangfire.Redis.StackExchange;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
+using Polly;
 using TravelAdvisor.Infrastructure.Caching;
 using TravelAdvisor.Infrastructure.ExternalApis;
 using TravelAdvisor.Infrastructure.Persistence;
@@ -26,9 +28,14 @@ public static class DependencyInjection
 
         services.AddSingleton<ICacheService, RedisCacheService>();
 
-        services.AddHttpClient<IDistrictService, DistrictService>();
-        services.AddHttpClient<IWeatherService, WeatherService>();
-        services.AddHttpClient<IAirQualityService, AirQualityService>();
+        services.AddHttpClient<IDistrictService, DistrictService>()
+            .AddStandardResilienceHandler(ConfigureResilienceOptions);
+
+        services.AddHttpClient<IWeatherService, WeatherService>()
+            .AddStandardResilienceHandler(ConfigureResilienceOptions);
+
+        services.AddHttpClient<IAirQualityService, AirQualityService>()
+            .AddStandardResilienceHandler(ConfigureResilienceOptions);
 
         services.AddScoped<CacheWarmingJob>();
         services.AddScoped<DistrictSyncJob>();
@@ -54,5 +61,21 @@ public static class DependencyInjection
         }
 
         return services;
+    }
+
+    private static void ConfigureResilienceOptions(HttpStandardResilienceOptions options)
+    {
+        options.Retry.MaxRetryAttempts = 3;
+        options.Retry.Delay = TimeSpan.FromSeconds(1);
+        options.Retry.BackoffType = DelayBackoffType.Exponential;
+        options.Retry.UseJitter = true;
+
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+        options.CircuitBreaker.FailureRatio = 0.5;
+        options.CircuitBreaker.MinimumThroughput = 5;
+        options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
+
+        options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
     }
 }
