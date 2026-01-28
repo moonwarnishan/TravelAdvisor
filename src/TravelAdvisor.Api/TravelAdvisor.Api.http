@@ -1,6 +1,120 @@
-@TravelAdvisor.Api_HostAddress = http://localhost:5155
+@baseUrl = http://localhost:5155/api/v1
 
-GET {{TravelAdvisor.Api_HostAddress}}/weatherforecast/
+### Health Check - Liveness
+GET http://localhost:5155/health
 Accept: application/json
 
-###
+### Health Check - Readiness (checks Redis & PostgreSQL)
+GET http://localhost:5155/health/ready
+Accept: application/json
+
+### Get Top 10 Districts (coolest with best air quality)
+GET {{baseUrl}}/Travel/top-districts?count=10
+Accept: application/json
+
+### Get Top 5 Districts
+GET {{baseUrl}}/Travel/top-districts?count=5
+Accept: application/json
+
+### Travel Recommendation - From Dhaka to Cox's Bazar
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 23.8103,
+  "currentLongitude": 90.4125,
+  "destinationDistrict": "Cox's Bazar",
+  "travelDate": "2026-01-30"
+}
+
+### Travel Recommendation - From Dhaka to Sylhet
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 23.8103,
+  "currentLongitude": 90.4125,
+  "destinationDistrict": "Sylhet",
+  "travelDate": "2026-01-31"
+}
+
+### Travel Recommendation - From Chittagong to Khulna
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 22.3569,
+  "currentLongitude": 91.7832,
+  "destinationDistrict": "Khulna",
+  "travelDate": "2026-02-01"
+}
+
+### Travel Recommendation - From Rajshahi to Rangpur
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 24.3636,
+  "currentLongitude": 88.6241,
+  "destinationDistrict": "Rangpur",
+  "travelDate": "2026-02-02"
+}
+
+### Travel Recommendation - From Comilla to Kurigram
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 23.4607,
+  "currentLongitude": 91.1809,
+  "destinationDistrict": "Kurigram",
+  "travelDate": "2026-02-03"
+}
+
+### Travel Recommendation - From Sylhet to Dhaka
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 24.8949,
+  "currentLongitude": 91.8687,
+  "destinationDistrict": "Dhaka",
+  "travelDate": "2026-02-04"
+}
+
+### Travel Recommendation - From Dhaka to Naogaon
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 23.8103,
+  "currentLongitude": 90.4125,
+  "destinationDistrict": "Naogaon",
+  "travelDate": "2026-02-01"
+}
+
+### Invalid Request - Coordinates outside Bangladesh (should fail validation)
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 0,
+  "currentLongitude": 0,
+  "destinationDistrict": "Dhaka",
+  "travelDate": "2026-01-30"
+}
+
+### Invalid Request - Missing destination (should fail validation)
+POST {{baseUrl}}/Travel/recommendation
+Content-Type: application/json
+
+{
+  "currentLatitude": 23.8103,
+  "currentLongitude": 90.4125,
+  "destinationDistrict": "",
+  "travelDate": "2026-01-30"
+}
+
+### Hangfire Dashboard
+GET http://localhost:5155/hangfire
+Accept: text/html
