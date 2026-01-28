@@ -1,0 +1,11 @@
+global using AutoMapper;
+global using FluentValidation;
+global using MediatR;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Logging;
+global using TravelAdvisor.Application.Common.Interfaces;
+global using TravelAdvisor.Application.Common.Models;
+global using TravelAdvisor.Application.DTOs.Districts;
+global using TravelAdvisor.Application.DTOs.Requests;
+global using TravelAdvisor.Domain.Common;
+global using TravelAdvisor.Domain.Entities;
