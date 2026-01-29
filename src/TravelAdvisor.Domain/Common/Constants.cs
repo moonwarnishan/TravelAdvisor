@@ -28,6 +28,7 @@ public static class Constants
     public static class Defaults
     {
         public const int TopDistrictsCount = 10;
+        public const int MaxDistrictsCount = 64;
         public const int CoordinatePrecision = 4;
     }
 

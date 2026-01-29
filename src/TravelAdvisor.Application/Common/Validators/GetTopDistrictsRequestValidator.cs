@@ -7,7 +7,7 @@ public sealed class GetTopDistrictsRequestValidator : AbstractValidator<GetTopDi
         RuleFor(x => x.Count)
             .GreaterThan(0)
             .WithMessage("Count must be greater than 0")
-            .LessThanOrEqualTo(Constants.Defaults.TopDistrictsCount)
-            .WithMessage($"Count cannot exceed {Constants.Defaults.TopDistrictsCount}");
+            .LessThanOrEqualTo(Constants.Defaults.MaxDistrictsCount)
+            .WithMessage($"Count cannot exceed {Constants.Defaults.MaxDistrictsCount}");
     }
 }

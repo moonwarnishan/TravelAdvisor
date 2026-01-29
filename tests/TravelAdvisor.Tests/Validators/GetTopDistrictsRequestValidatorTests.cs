@@ -13,6 +13,8 @@ public class GetTopDistrictsRequestValidatorTests
     [InlineData(1)]
     [InlineData(5)]
     [InlineData(10)]
+    [InlineData(32)]
+    [InlineData(64)]
     public void Validate_WithValidCount_ShouldPass(int count)
     {
         var request = new GetTopDistrictsRequest { Count = count };
@@ -39,7 +41,7 @@ public class GetTopDistrictsRequestValidatorTests
     [Fact]
     public void Validate_WithCountExceedingMax_ShouldFail()
     {
-        var request = new GetTopDistrictsRequest { Count = Constants.Defaults.TopDistrictsCount + 1 };
+        var request = new GetTopDistrictsRequest { Count = Constants.Defaults.MaxDistrictsCount + 1 };
 
         var result = _validator.Validate(request);
 
@@ -50,7 +52,7 @@ public class GetTopDistrictsRequestValidatorTests
     [Fact]
     public void Validate_WithMaxCount_ShouldPass()
     {
-        var request = new GetTopDistrictsRequest { Count = Constants.Defaults.TopDistrictsCount };
+        var request = new GetTopDistrictsRequest { Count = Constants.Defaults.MaxDistrictsCount };
 
         var result = _validator.Validate(request);
 
