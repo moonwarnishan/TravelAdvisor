@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura,opencover</Format>
+          <Exclude>
+            <!-- Exclude Program.cs and startup -->
+            [*]Program
+            [*]*.Program
+
+            <!-- Exclude DI registration -->
+            [*]*.DependencyInjection
+
+            <!-- Exclude Migrations -->
+            [*]*.Migrations.*
+
+            <!-- Exclude DTOs and Models (simple data classes) -->
+            [*]*.DTOs.*
+            [*]*.Models.*
+
+            <!-- Exclude Configuration classes -->
+            [*]*.Configuration.*
+
+            <!-- Exclude GlobalUsings -->
+            [*]GlobalUsings
+
+            <!-- Exclude Entity classes (simple POCOs) -->
+            [*]*.Entities.*
+
+            <!-- Exclude Mapping Profiles -->
+            [*]*MappingProfile
+          </Exclude>
+          <ExcludeByAttribute>
+            GeneratedCodeAttribute
+            ExcludeFromCodeCoverageAttribute
+            CompilerGeneratedAttribute
+          </ExcludeByAttribute>
+          <ExcludeByFile>
+            **/Migrations/*.cs
+            **/GlobalUsings.cs
+            **/Program.cs
+          </ExcludeByFile>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

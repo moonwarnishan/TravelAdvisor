@@ -5,4 +5,7 @@
     <Project Path="src/TravelAdvisor.Domain/TravelAdvisor.Domain.csproj" />
     <Project Path="src/TravelAdvisor.Infrastructure/TravelAdvisor.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TravelAdvisor.Tests/TravelAdvisor.Tests.csproj" />
+  </Folder>
 </Solution>
