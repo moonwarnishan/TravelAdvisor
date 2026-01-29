@@ -22,6 +22,20 @@ services:
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
 
+  seq:
+    image: datalust/seq:2024.1
+    platform: linux/amd64
+    container_name: traveladvisor-seq
+    ports:
+      - "5341:80"
+    environment:
+      - ACCEPT_EULA=Y
+    volumes:
+      - seq-data:/data
+    restart: unless-stopped
+    mem_limit: 512m
+
 volumes:
   redis-data:
   postgres-data:
+  seq-data:

@@ -13,7 +13,14 @@ public sealed class GlobalExceptionHandler(
         Exception exception,
         CancellationToken cancellationToken)
     {
-        logger.LogError(exception, "An unhandled exception occurred: {Message}", exception.Message);
+        if (exception is ValidationException validationException)
+        {
+            logger.LogWarning("Validation failed: {Errors}", string.Join(", ", validationException.ValidationErrors));
+        }
+        else
+        {
+            logger.LogError(exception, "An unhandled exception occurred: {Message}", exception.Message);
+        }
 
         var (statusCode, response) = exception switch
         {
