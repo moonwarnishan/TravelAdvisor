@@ -20,7 +20,17 @@ A REST API that helps users make travel decisions based on weather and air quali
    - [CQRS Pattern](#cqrs-pattern)
    - [Data Flow](#data-flow)
 
-3. [Documentation](#3-documentation)
+3. [Testing](#3-testing)
+   - [Running Tests](#running-tests)
+   - [Test Coverage](#test-coverage)
+   - [Test Structure](#test-structure)
+
+4. [Logging & Monitoring](#4-logging--monitoring)
+   - [Serilog](#serilog)
+   - [Seq Log Viewer](#seq-log-viewer)
+   - [Log Configuration](#log-configuration)
+
+5. [Documentation](#5-documentation)
    - [Technologies Used](#technologies-used)
    - [Why These Technologies](#why-these-technologies)
    - [Configuration Reference](#configuration-reference)
@@ -63,7 +73,7 @@ sudo apt-get install -y dotnet-sdk-10.0
 
 ### 1.2 Docker Desktop
 
-Docker is required to run Redis (caching) and PostgreSQL (database).
+Docker is required to run Redis (caching), PostgreSQL (database), and Seq (log viewer).
 
 **For macOS:**
 1. Go to https://www.docker.com/products/docker-desktop/
@@ -123,11 +133,14 @@ TravelAdvisor/
 ├── docker-compose.yml
 ├── README.md
 ├── TravelAdvisor.sln
-└── src/
-    ├── TravelAdvisor.Api/
-    ├── TravelAdvisor.Application/
-    ├── TravelAdvisor.Domain/
-    └── TravelAdvisor.Infrastructure/
+├── coverlet.runsettings
+├── src/
+│   ├── TravelAdvisor.Api/
+│   ├── TravelAdvisor.Application/
+│   ├── TravelAdvisor.Domain/
+│   └── TravelAdvisor.Infrastructure/
+└── tests/
+    └── TravelAdvisor.Tests/
 ```
 
 ### Step 3: Restore NuGet Packages
@@ -144,6 +157,7 @@ Restored /path/to/TravelAdvisor.Domain.csproj
 Restored /path/to/TravelAdvisor.Application.csproj
 Restored /path/to/TravelAdvisor.Infrastructure.csproj
 Restored /path/to/TravelAdvisor.Api.csproj
+Restored /path/to/TravelAdvisor.Tests.csproj
 ```
 
 ### Step 4: Build the Project
@@ -165,7 +179,7 @@ If you see errors, make sure you have .NET 10.0 SDK installed.
 
 ## Running the Application
 
-### Step 1: Start Docker Services (Redis & PostgreSQL)
+### Step 1: Start Docker Services (Redis, PostgreSQL & Seq)
 
 Open a terminal and navigate to the project root folder (where `docker-compose.yml` is located):
 
@@ -174,9 +188,10 @@ docker-compose up -d
 ```
 
 **What this does:**
-- Downloads Redis and PostgreSQL images (first time only)
+- Downloads Redis, PostgreSQL, and Seq images (first time only)
 - Starts a Redis container named `traveladvisor-redis` at `localhost:6379`
 - Starts a PostgreSQL container named `traveladvisor-postgres` at `localhost:5432`
+- Starts a Seq container named `traveladvisor-seq` at `localhost:5341`
 - Creates persistent volumes for data storage
 
 **Verify services are running:**
@@ -186,9 +201,10 @@ docker ps
 
 You should see:
 ```
-CONTAINER ID   IMAGE               STATUS         PORTS                    NAMES
-xxxxxxxxxxxx   redis:alpine        Up X seconds   0.0.0.0:6379->6379/tcp   traveladvisor-redis
-xxxxxxxxxxxx   postgres:16-alpine  Up X seconds   0.0.0.0:5432->5432/tcp   traveladvisor-postgres
+CONTAINER ID   IMAGE                STATUS         PORTS                    NAMES
+xxxxxxxxxxxx   redis:alpine         Up X seconds   0.0.0.0:6379->6379/tcp   traveladvisor-redis
+xxxxxxxxxxxx   postgres:16-alpine   Up X seconds   0.0.0.0:5432->5432/tcp   traveladvisor-postgres
+xxxxxxxxxxxx   datalust/seq:2024.1  Up X seconds   0.0.0.0:5341->80/tcp     traveladvisor-seq
 ```
 
 ### Step 2: Start the API
@@ -208,16 +224,11 @@ dotnet run
 
 **Expected output:**
 ```
-info: TravelAdvisor.Infrastructure.BackgroundJobs.DistrictSyncJob
-      Starting district sync job
-info: TravelAdvisor.Infrastructure.BackgroundJobs.DistrictSyncJob
-      District sync completed. Added 64 districts.
-info: TravelAdvisor.Infrastructure.BackgroundJobs.CacheWarmingJob
-      Cache warming completed successfully
-info: Microsoft.Hosting.Lifetime[14]
-      Now listening on: http://localhost:5155
-info: Microsoft.Hosting.Lifetime[0]
-      Application started. Press Ctrl+C to shut down.
+[14:30:45 INF] Starting TravelAdvisor API
+[14:30:46 INF] Starting district sync job
+[14:30:47 INF] District sync completed. Added 64 districts.
+[14:30:48 INF] Cache warmup completed successfully
+[14:30:48 INF] Now listening on: http://localhost:5155
 ```
 
 **Note:** The port might be different (e.g., 5000, 5155, etc.). Use whatever port is shown in your terminal.
@@ -226,8 +237,11 @@ info: Microsoft.Hosting.Lifetime[0]
 
 Open your web browser and go to:
 
-- **Swagger UI (API Documentation):** http://localhost:5155
-- **Hangfire Dashboard (Background Jobs):** http://localhost:5155/hangfire
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Swagger UI** | http://localhost:5155 | API Documentation & Testing |
+| **Hangfire Dashboard** | http://localhost:5155/hangfire | Background Jobs Monitor |
+| **Seq Log Viewer** | http://localhost:5341 | Structured Log Viewer |
 
 Replace `5155` with your actual port number if different.
 
@@ -247,7 +261,7 @@ GET /api/v1/Travel/top-districts?count=10
 **Parameters:**
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| count | integer | No | Number of districts to return (default: 10, max: 50) |
+| count | integer | No | Number of districts to return (default: 10, max: 64) |
 
 **Example Request:**
 ```bash
@@ -270,7 +284,7 @@ curl http://localhost:5155/api/v1/Travel/top-districts?count=10
       }
     ],
     "generatedAt": "2026-01-28T14:00:00Z",
-    "travelDate": "2026-01-28"
+    "forecastPeriod": "2026-01-28 to 2026-02-03"
   },
   "message": null,
   "errors": null,
@@ -303,7 +317,7 @@ curl -X POST http://localhost:5155/api/v1/Travel/recommendation \
     "currentLatitude": 23.7115,
     "currentLongitude": 90.4111,
     "destinationDistrict": "Cox'\''s Bazar",
-    "travelDate": "2026-01-29"
+    "travelDate": "2026-01-31"
   }'
 ```
 
@@ -335,20 +349,6 @@ curl -X POST http://localhost:5155/api/v1/Travel/recommendation \
 }
 ```
 
-**Example Response (Not Recommended):**
-```json
-{
-  "success": true,
-  "data": {
-    "recommendation": "Not Recommended",
-    "reason": "Your destination is hotter and has worse air quality than your current location. It's better to stay where you are."
-  },
-  "message": null,
-  "errors": null,
-  "statusCode": 200
-}
-```
-
 ---
 
 ## Stopping the Application
@@ -356,7 +356,7 @@ curl -X POST http://localhost:5155/api/v1/Travel/recommendation \
 ### Stop the API
 Press `Ctrl+C` in the terminal where the API is running.
 
-### Stop Docker Services (Redis & PostgreSQL)
+### Stop Docker Services
 ```bash
 docker-compose down
 ```
@@ -365,7 +365,7 @@ docker-compose down
 ```bash
 docker-compose down -v
 ```
-**Warning:** This removes all cached data and the district database. On next startup, districts will be re-fetched from the external API.
+**Warning:** This removes all cached data, logs, and the district database. On next startup, districts will be re-fetched from the external API.
 
 ---
 
@@ -381,6 +381,7 @@ docker-compose down -v
 | "Build failed with errors" | Run `dotnet restore` then `dotnet build` |
 | "Redis connection failed" | Run `docker ps` to check if Redis is running, if not run `docker-compose up -d` |
 | "PostgreSQL connection refused" | Run `docker ps` to check if PostgreSQL is running, if not run `docker-compose up -d` |
+| "Seq keeps restarting" | On Apple Silicon, use `platform: linux/amd64` in docker-compose.yml |
 | API returns empty data | Wait for startup to complete (district sync + cache warming) |
 | "Latitude/Longitude validation error" | Coordinates must be within Bangladesh bounds (Lat: 20.5-26.7, Long: 88.0-92.7) |
 
@@ -430,40 +431,60 @@ Dependencies flow **inward only**:
 
 ```
 TravelAdvisor/
-├── docker-compose.yml                 # Docker configuration for Redis
+├── docker-compose.yml                 # Docker configuration
+├── coverlet.runsettings               # Code coverage configuration
 ├── README.md                          # This documentation
 ├── TravelAdvisor.sln                  # Solution file
-└── src/
-    ├── TravelAdvisor.Domain/          # Core business entities
-    │   ├── Common/
-    │   │   └── Constants.cs           # Application-wide constants
-    │   ├── Entities/
-    │   │   └── District.cs            # District entity
-    │   └── Exceptions/                # Custom domain exceptions
-    │
-    ├── TravelAdvisor.Application/     # Business logic layer
-    │   ├── Common/
-    │   │   ├── Interfaces/            # Service contracts
-    │   │   ├── Models/                # Response models (ApiResponse)
-    │   │   └── Validators/            # FluentValidation validators
-    │   ├── DTOs/                      # Data Transfer Objects
-    │   └── Features/                  # CQRS Queries & Handlers
-    │       ├── TopDistricts/
-    │       └── TravelRecommendation/
-    │
-    ├── TravelAdvisor.Infrastructure/  # External services layer
-    │   ├── BackgroundJobs/            # Hangfire jobs (CacheWarming, DistrictSync)
-    │   ├── Caching/                   # Redis cache service
-    │   ├── Configuration/             # Settings classes
-    │   ├── ExternalApis/              # HTTP clients for external APIs
-    │   ├── Mapping/                   # AutoMapper profiles
-    │   ├── Migrations/                # EF Core database migrations
-    │   └── Persistence/               # DbContext and database entities
-    │
-    └── TravelAdvisor.Api/             # Web API layer
-        ├── Controllers/               # API endpoints
-        ├── Middleware/                # Global exception handler
-        └── Program.cs                 # Application entry point
+├── src/
+│   ├── TravelAdvisor.Domain/          # Core business entities
+│   │   ├── Common/
+│   │   │   └── Constants.cs           # Application-wide constants
+│   │   ├── Entities/
+│   │   │   └── District.cs            # District entity
+│   │   └── Exceptions/                # Custom domain exceptions
+│   │       ├── BadRequestException.cs
+│   │       ├── DomainException.cs
+│   │       ├── ExternalServiceException.cs
+│   │       ├── NotFoundException.cs
+│   │       └── ValidationException.cs
+│   │
+│   ├── TravelAdvisor.Application/     # Business logic layer
+│   │   ├── Common/
+│   │   │   ├── Interfaces/            # Service contracts
+│   │   │   ├── Models/                # Response models (ApiResponse)
+│   │   │   └── Validators/            # FluentValidation validators
+│   │   ├── DTOs/                      # Data Transfer Objects
+│   │   └── Features/                  # CQRS Queries & Handlers
+│   │       ├── TopDistricts/
+│   │       └── TravelRecommendation/
+│   │
+│   ├── TravelAdvisor.Infrastructure/  # External services layer
+│   │   ├── BackgroundJobs/            # Hangfire jobs
+│   │   │   ├── CacheWarmingJob.cs
+│   │   │   └── DistrictSyncJob.cs
+│   │   ├── Caching/                   # Redis cache service
+│   │   ├── Configuration/             # Settings classes
+│   │   ├── ExternalApis/              # HTTP clients for external APIs
+│   │   ├── Mapping/                   # AutoMapper profiles
+│   │   ├── Migrations/                # EF Core database migrations
+│   │   └── Persistence/               # DbContext
+│   │
+│   └── TravelAdvisor.Api/             # Web API layer
+│       ├── Controllers/               # API endpoints
+│       ├── Middleware/                # Global exception handler
+│       ├── appsettings.json           # Configuration
+│       └── Program.cs                 # Application entry point
+│
+└── tests/
+    └── TravelAdvisor.Tests/           # Unit tests
+        ├── BackgroundJobs/            # Background job tests
+        ├── Common/                    # Test helpers
+        ├── Controllers/               # Controller tests
+        ├── Exceptions/                # Exception tests
+        ├── Handlers/                  # Query handler tests
+        ├── Middleware/                # Middleware tests
+        ├── Services/                  # Service tests
+        └── Validators/                # Validator tests
 ```
 
 ---
@@ -483,14 +504,6 @@ TravelAdvisor/
 └──────────────┘     │  to Handler  │     └──────────────────────┘
                      └──────────────┘
 ```
-
-### Example Flow
-
-1. **Controller** receives HTTP request
-2. **Controller** creates a Query object
-3. **MediatR** dispatches Query to appropriate Handler
-4. **Handler** processes business logic and returns result
-5. **Controller** wraps result in ApiResponse
 
 ### Benefits
 
@@ -526,7 +539,6 @@ TravelAdvisor/
 ├─────────────────────────────────────────────────────────────────────┤
 │  1. Fetch all 64 districts from external API                        │
 │  2. Store districts in PostgreSQL database                          │
-│  (Static data - districts rarely change)                            │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -537,7 +549,7 @@ TravelAdvisor/
 │  2. Fetch weather data for all districts (batch API call)           │
 │  3. Fetch air quality data for all districts (batch API call)       │
 │  4. Store everything in Redis cache                                 │
-│  5. Pre-compute and cache top 10 ranking                            │
+│  5. Pre-compute and cache top districts ranking                     │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
@@ -552,7 +564,257 @@ TravelAdvisor/
 
 ---
 
-# 3. Documentation
+# 3. Testing
+
+## Running Tests
+
+### Run All Tests
+```bash
+dotnet test
+```
+
+**Expected output:**
+```
+Passed!  - Failed: 0, Passed: 88, Skipped: 0, Total: 88, Duration: 250 ms
+```
+
+### Run Tests with Detailed Output
+```bash
+dotnet test --verbosity normal
+```
+
+### Run Tests with Code Coverage
+```bash
+dotnet test --collect:"XPlat Code Coverage" --settings coverlet.runsettings
+```
+
+Coverage reports will be generated in `TestResults/` folder.
+
+### Generate HTML Coverage Report
+```bash
+# Install report generator (one time)
+dotnet tool install -g dotnet-reportgenerator-globaltool
+
+# Generate HTML report
+reportgenerator -reports:./TestResults/**/coverage.cobertura.xml -targetdir:./CoverageReport -reporttypes:Html
+
+# Open report
+open CoverageReport/index.html   # macOS
+start CoverageReport/index.html  # Windows
+```
+
+---
+
+## Test Coverage
+
+| Category | Tests | Description |
+|----------|-------|-------------|
+| **Validators** | 13 | Request validation (coordinates, dates, count limits) |
+| **Handlers** | 9 | Query handler logic (caching, ranking, recommendations) |
+| **Services** | 19 | DistrictService, WeatherService, AirQualityService |
+| **Controllers** | 6 | API endpoint tests |
+| **Middleware** | 8 | Global exception handler tests |
+| **Exceptions** | 9 | Domain exception tests |
+| **BackgroundJobs** | 10 | CacheWarmingJob, DistrictSyncJob tests |
+| **Total** | **88** | |
+
+### Coverage Exclusions
+
+The following are excluded from coverage reports (configured in `coverlet.runsettings`):
+- `Program.cs` - Entry point
+- `*.DTOs.*` - Simple data transfer objects
+- `*.Models.*` - Simple data models
+- `*.Entities.*` - Entity classes
+- `*.Configuration.*` - Settings classes
+- `*.Migrations.*` - EF Core migrations
+- `*MappingProfile` - AutoMapper profiles
+
+---
+
+## Test Structure
+
+```
+tests/TravelAdvisor.Tests/
+├── BackgroundJobs/
+│   ├── CacheWarmingJobTests.cs      # Cache warming tests
+│   └── DistrictSyncJobTests.cs      # District sync tests
+├── Common/
+│   └── MockHttpMessageHandler.cs    # HTTP mocking helper
+├── Controllers/
+│   └── TravelControllerTests.cs     # Controller tests
+├── Exceptions/
+│   └── DomainExceptionTests.cs      # Exception tests
+├── Handlers/
+│   ├── GetTopDistrictsQueryHandlerTests.cs
+│   └── GetTravelRecommendationQueryHandlerTests.cs
+├── Middleware/
+│   └── GlobalExceptionHandlerTests.cs
+├── Services/
+│   ├── AirQualityServiceTests.cs
+│   ├── DistrictServiceTests.cs
+│   └── WeatherServiceTests.cs
+└── Validators/
+    ├── GetTopDistrictsRequestValidatorTests.cs
+    └── TravelRecommendationRequestValidatorTests.cs
+```
+
+### Test Packages
+
+| Package | Description |
+|---------|-------------|
+| **xUnit** | Test framework |
+| **Moq** | Mocking library |
+| **FluentAssertions** | Assertion library |
+| **Microsoft.EntityFrameworkCore.InMemory** | In-memory database for testing |
+| **coverlet.collector** | Code coverage collection |
+
+---
+
+# 4. Logging & Monitoring
+
+## Serilog
+
+The application uses **Serilog** for structured logging with multiple sinks.
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Console Logging** | Colored, formatted console output |
+| **File Logging** | Rolling daily logs in `Logs/` folder |
+| **Seq Integration** | Structured log viewer with search & filtering |
+| **Request Logging** | HTTP method, path, status code, duration |
+| **Enrichers** | Machine name, environment, thread ID |
+
+### Log Levels
+
+| Level | Usage |
+|-------|-------|
+| **Debug** | Detailed debugging information |
+| **Information** | General operational events |
+| **Warning** | Validation errors, potential issues |
+| **Error** | Exceptions, failures |
+| **Fatal** | Application crashes |
+
+### Log Output Example
+
+**Console:**
+```
+[14:30:45 INF] Starting TravelAdvisor API
+[14:30:46 INF] HTTP GET /api/v1/travel/top-districts responded 200 in 45.23 ms
+[14:30:47 WRN] Validation failed: Latitude must be within Bangladesh bounds
+[14:30:48 ERR] External service 'WeatherAPI' failed
+```
+
+**File:** `Logs/traveladvisor-2026-01-30.log`
+```
+2026-01-30 14:30:45.123 +06:00 [INF] Starting TravelAdvisor API
+2026-01-30 14:30:46.456 +06:00 [INF] HTTP GET /api/v1/travel/top-districts responded 200 in 45.23 ms
+```
+
+---
+
+## Seq Log Viewer
+
+**Seq** is a centralized log viewer with powerful search and filtering capabilities.
+
+### Accessing Seq
+
+1. Start Docker services: `docker-compose up -d`
+2. Open browser: http://localhost:5341
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Real-time Logs** | See logs as they happen |
+| **Full-text Search** | Search across all log properties |
+| **Filtering** | Filter by level, source, time range |
+| **SQL-like Queries** | `@Level = 'Error' and RequestPath like '/api%'` |
+| **Dashboards** | Create custom dashboards |
+| **Alerts** | Set up alerts for specific conditions |
+
+### Example Queries
+
+```sql
+-- All errors
+@Level = 'Error'
+
+-- Validation failures
+@Message like '%Validation failed%'
+
+-- Slow requests (> 1 second)
+Elapsed > 1000
+
+-- Specific endpoint
+RequestPath = '/api/v1/Travel/top-districts'
+
+-- Errors in the last hour
+@Level = 'Error' and @Timestamp > Now() - 1h
+```
+
+---
+
+## Log Configuration
+
+### Production (appsettings.json)
+
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "Microsoft.AspNetCore": "Warning",
+        "Hangfire": "Information"
+      }
+    },
+    "WriteTo": [
+      { "Name": "Console" },
+      {
+        "Name": "File",
+        "Args": {
+          "path": "Logs/traveladvisor-.log",
+          "rollingInterval": "Day",
+          "retainedFileCountLimit": 7
+        }
+      }
+    ]
+  }
+}
+```
+
+### Development (appsettings.Development.json)
+
+```json
+{
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Debug"
+    },
+    "WriteTo": [
+      { "Name": "Console" },
+      { "Name": "File" },
+      {
+        "Name": "Seq",
+        "Args": { "serverUrl": "http://localhost:5341" }
+      }
+    ]
+  }
+}
+```
+
+### Log File Retention
+
+| Environment | Retention | Location |
+|-------------|-----------|----------|
+| Production | 7 days | `Logs/traveladvisor-{date}.log` |
+| Development | 3 days | `Logs/traveladvisor-debug-{date}.log` |
+
+---
+
+# 5. Documentation
 
 ## Technologies Used
 
@@ -570,208 +832,83 @@ TravelAdvisor/
 | Package | Version | Description |
 |---------|---------|-------------|
 | Asp.Versioning.Mvc | 8.1.1 | API versioning support |
-| Asp.Versioning.Mvc.ApiExplorer | 8.1.1 | Swagger integration for versioning |
-| Hangfire.AspNetCore | 1.8.22 | Background job dashboard UI |
-| Microsoft.AspNetCore.OpenApi | 10.0.1 | OpenAPI/Swagger support |
-| Swashbuckle.AspNetCore | 10.1.0 | Swagger UI generator |
+| Hangfire.AspNetCore | 1.8.22 | Background job dashboard |
+| Serilog.AspNetCore | 10.0.0 | Structured logging |
+| Serilog.Sinks.Seq | 9.0.0 | Seq log sink |
+| Swashbuckle.AspNetCore | 10.1.0 | Swagger UI |
 
 #### Application Layer
 | Package | Version | Description |
 |---------|---------|-------------|
-| AutoMapper.Extensions.Microsoft.DependencyInjection | 12.0.1 | Object-to-object mapping |
-| FluentValidation.DependencyInjectionExtensions | 12.1.1 | Request validation |
-| MediatR | 14.0.0 | Mediator pattern for CQRS |
+| AutoMapper | 12.0.1 | Object mapping |
+| FluentValidation | 12.1.1 | Request validation |
+| MediatR | 14.0.0 | CQRS mediator |
 
 #### Infrastructure Layer
 | Package | Version | Description |
 |---------|---------|-------------|
-| Hangfire.Core | 1.8.22 | Background job processing |
 | Hangfire.Redis.StackExchange | 1.12.0 | Redis storage for Hangfire |
-| Microsoft.EntityFrameworkCore | 10.0.0 | ORM for database access |
-| Microsoft.Extensions.Http | 10.0.2 | HTTP client factory |
-| Microsoft.Extensions.Options.ConfigurationExtensions | 10.0.2 | Strongly-typed configuration |
-| Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.0 | PostgreSQL provider for EF Core |
-| StackExchange.Redis | 2.10.1 | Redis client library |
+| Microsoft.EntityFrameworkCore | 10.0.0 | ORM |
+| Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.0 | PostgreSQL provider |
+| StackExchange.Redis | 2.10.1 | Redis client |
+| Polly | 8.x | Resilience policies |
+
+#### Test Layer
+| Package | Version | Description |
+|---------|---------|-------------|
+| xUnit | 2.9.3 | Test framework |
+| Moq | 4.20.72 | Mocking library |
+| FluentAssertions | 8.8.0 | Assertion library |
+| coverlet.collector | 6.0.4 | Code coverage |
 
 ### External Services
 
-| Service | Description |
-|---------|-------------|
-| PostgreSQL | Relational database for persistent district storage |
-| Redis | In-memory cache for fast API responses |
-| Open-Meteo Weather API | Free weather forecast data |
-| Open-Meteo Air Quality API | Free air quality data |
+| Service | Port | Description |
+|---------|------|-------------|
+| PostgreSQL | 5432 | Relational database |
+| Redis | 6379 | In-memory cache |
+| Seq | 5341 | Log viewer |
+| Open-Meteo Weather API | - | Weather forecasts |
+| Open-Meteo Air Quality API | - | Air quality data |
 
 ---
 
 ## Why These Technologies
 
-### PostgreSQL
+### Serilog
 
 **What is it?**
-PostgreSQL is a powerful, open-source relational database system known for reliability and data integrity.
+A diagnostic logging library for .NET with structured logging support.
 
 **Why we use it:**
 | Reason | Explanation |
 |--------|-------------|
-| **Data Persistence** | District data survives container restarts |
-| **ACID Compliance** | Guarantees data consistency and integrity |
-| **Entity Framework Core** | Seamless integration with .NET via EF Core |
-| **Reliability** | Production-grade database trusted by enterprises |
+| **Structured Logging** | Log properties, not just strings |
+| **Multiple Sinks** | Console, File, Seq, and more |
+| **Performance** | Asynchronous, non-blocking |
+| **Filtering** | Fine-grained control over log levels |
 
-**How it helps:**
-```
-Without PostgreSQL:  Districts fetched from external API on every restart
-With PostgreSQL:     Districts stored locally, API called only monthly
-```
-
----
-
-### Redis
+### Seq
 
 **What is it?**
-Redis is an in-memory data store that acts as a super-fast database for temporary data.
+A centralized log server with powerful search capabilities.
 
 **Why we use it:**
 | Reason | Explanation |
 |--------|-------------|
-| **Speed** | Data stored in RAM, reads/writes in microseconds |
-| **Performance** | API responses go from ~2 seconds to ~50 milliseconds |
-| **Reduced API Calls** | External weather APIs have rate limits; caching prevents hitting them repeatedly |
-| **Hangfire Storage** | Stores background job data reliably |
+| **Search** | Full-text search across all logs |
+| **Filtering** | SQL-like query language |
+| **Real-time** | Live log streaming |
+| **Free** | Free for single-user development |
 
-**How it helps:**
-```
-Without Redis:  User Request → External API (2000ms) → Response
-With Redis:     User Request → Redis Cache (5ms) → Response
-```
+### xUnit + Moq + FluentAssertions
 
----
-
-### Hangfire
-
-**What is it?**
-Hangfire is a library for running background tasks without blocking the main application.
-
-**Why we use it:**
-| Reason | Explanation |
-|--------|-------------|
-| **Cache Warming** | Pre-fetches weather data every 15 minutes before users request it |
-| **Non-Blocking** | Heavy tasks run in background, API stays responsive |
-| **Reliability** | Failed jobs are automatically retried |
-| **Monitoring** | Built-in dashboard at `/hangfire` shows job status |
-
-**How it helps:**
-```
-Traditional:    User waits for data fetch (slow first request)
-With Hangfire:  Data already cached before user asks (always fast)
-```
-
----
-
-### FluentValidation
-
-**What is it?**
-A library for building strongly-typed validation rules for request objects.
-
-**Why we use it:**
-| Reason | Explanation |
-|--------|-------------|
-| **Clean Code** | Validation rules separated from business logic |
-| **Readable** | Rules read like English sentences |
-| **Reusable** | Same validator used across different endpoints |
-| **Detailed Errors** | Returns specific error messages to users |
-
-**Example:**
-```csharp
-// Validates coordinates are within Bangladesh boundaries
-RuleFor(x => x.CurrentLatitude)
-    .InclusiveBetween(20.5, 26.7)
-    .WithMessage("Latitude must be within Bangladesh bounds (20.5 to 26.7)");
-
-RuleFor(x => x.CurrentLongitude)
-    .InclusiveBetween(88.0, 92.7)
-    .WithMessage("Longitude must be within Bangladesh bounds (88.0 to 92.7)");
-```
-
-**How it helps:**
-```
-Without Validation:  Invalid data causes crashes deep in code
-With Validation:     Invalid data caught early with clear error messages
-```
-
----
-
-### MediatR
-
-**What is it?**
-A library implementing the Mediator pattern, which decouples request senders from handlers.
-
-**Why we use it:**
-| Reason | Explanation |
-|--------|-------------|
-| **Decoupling** | Controllers don't know about handler implementations |
-| **Single Responsibility** | Each handler does exactly one thing |
-| **Testability** | Handlers can be unit tested without HTTP context |
-| **Pipeline Behaviors** | Can add cross-cutting concerns (logging, validation) |
-
-**How it helps:**
-```
-Without MediatR:  Controller → Service → Repository (tightly coupled)
-With MediatR:     Controller → MediatR → Handler (loosely coupled)
-```
-
----
-
-### AutoMapper
-
-**What is it?**
-A library that automatically maps properties from one object to another.
-
-**Why we use it:**
-| Reason | Explanation |
-|--------|-------------|
-| **Less Boilerplate** | No manual property-by-property copying |
-| **Consistency** | Mapping rules defined once, used everywhere |
-| **Maintainability** | Adding new properties doesn't require updating multiple files |
-
-**Example:**
-```
-API Response Model:     DistrictApiModel { lat, long, name }
-                              ↓ AutoMapper
-Domain Entity:          District { Latitude, Longitude, Name }
-```
-
----
-
-### Swashbuckle (Swagger)
-
-**What is it?**
-A tool that generates interactive API documentation from your code.
-
-**Why we use it:**
-| Reason | Explanation |
-|--------|-------------|
-| **Auto-Documentation** | API docs generated from code annotations |
-| **Interactive Testing** | Test API endpoints directly in browser |
-| **No Postman Needed** | Built-in request/response testing |
-| **Always Up-to-Date** | Documentation updates when code changes |
-
-**Access at:** `http://localhost:5155/` (Swagger UI)
-
----
-
-### API Versioning
-
-**What is it?**
-A way to maintain multiple versions of an API simultaneously.
-
-**Why we use it:**
-| Reason | Explanation |
-|--------|-------------|
-| **Backward Compatibility** | Old clients continue working when API changes |
-| **Gradual Migration** | Users can migrate to new version at their pace |
-| **Clear URLs** | Version visible in URL: `/api/v1/travel/...` |
+**Why this testing stack:**
+| Tool | Benefit |
+|------|---------|
+| **xUnit** | Modern, extensible, parallel test execution |
+| **Moq** | Easy mocking of dependencies |
+| **FluentAssertions** | Readable assertions: `result.Should().Be(expected)` |
 
 ---
 
@@ -781,73 +918,45 @@ A way to maintain multiple versions of an API simultaneously.
 
 ```json
 {
-  "Logging": {
-    "LogLevel": {
+  "Serilog": {
+    "Using": ["Serilog.Sinks.Console", "Serilog.Sinks.File", "Serilog.Sinks.Seq"],
+    "MinimumLevel": {
       "Default": "Information",
-      "Microsoft.AspNetCore": "Warning",
-      "Hangfire": "Information"
-    }
+      "Override": {
+        "Microsoft": "Warning",
+        "Hangfire": "Information"
+      }
+    },
+    "WriteTo": [
+      { "Name": "Console" },
+      { "Name": "File", "Args": { "path": "Logs/traveladvisor-.log" } }
+    ]
   },
-  "AllowedHosts": "*",
   "ConnectionStrings": {
     "Redis": "localhost:6379",
-    "PostgreSQL": "Host=localhost;Port=5432;Database=traveladvisor;Username=traveladvisor;Password=traveladvisor123"
+    "PostgreSQL": "Host=localhost;Port=5432;Database=traveladvisor;..."
   },
   "ApiSettings": {
-    "DistrictsUrl": "https://raw.githubusercontent.com/strativ-dev/technical-screening-test/main/bd-districts.json",
+    "DistrictsUrl": "https://raw.githubusercontent.com/.../bd-districts.json",
     "WeatherApiBaseUrl": "https://api.open-meteo.com/v1/forecast",
     "AirQualityApiBaseUrl": "https://air-quality-api.open-meteo.com/v1/air-quality"
   },
   "CacheSettings": {
     "DefaultExpirationMinutes": 15,
-    "DistrictsCacheHours": 24,
     "WeatherCacheMinutes": 30,
-    "AirQualityCacheMinutes": 30,
     "CacheWarmingCronSchedule": "*/15 * * * *",
     "DistrictSyncCronSchedule": "0 0 1 * *"
   }
 }
 ```
 
-### Configuration Options
+### Docker Compose Services
 
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `ConnectionStrings:Redis` | Redis server connection string | `localhost:6379` |
-| `ConnectionStrings:PostgreSQL` | PostgreSQL server connection string | `Host=localhost;Port=5432;...` |
-| `ApiSettings:DistrictsUrl` | URL to fetch Bangladesh districts | GitHub raw URL |
-| `ApiSettings:WeatherApiBaseUrl` | Open-Meteo weather API base URL | `https://api.open-meteo.com/v1/forecast` |
-| `ApiSettings:AirQualityApiBaseUrl` | Open-Meteo air quality API base URL | `https://air-quality-api.open-meteo.com/v1/air-quality` |
-| `CacheSettings:DefaultExpirationMinutes` | Default cache expiration | 15 minutes |
-| `CacheSettings:DistrictsCacheHours` | How long to cache district list | 24 hours |
-| `CacheSettings:WeatherCacheMinutes` | How long to cache weather data | 30 minutes |
-| `CacheSettings:AirQualityCacheMinutes` | How long to cache air quality data | 30 minutes |
-| `CacheSettings:CacheWarmingCronSchedule` | How often to run cache warming job | Every 15 minutes |
-| `CacheSettings:DistrictSyncCronSchedule` | How often to sync districts from API to DB | Monthly (1st of month) |
-
-### Cron Schedule Format
-
-The `CacheWarmingCronSchedule` uses standard cron format:
-
-```
-┌───────────── minute (0 - 59)
-│ ┌───────────── hour (0 - 23)
-│ │ ┌───────────── day of month (1 - 31)
-│ │ │ ┌───────────── month (1 - 12)
-│ │ │ │ ┌───────────── day of week (0 - 6)
-│ │ │ │ │
-│ │ │ │ │
-* * * * *
-```
-
-**Examples:**
-| Schedule | Meaning |
-|----------|---------|
-| `*/15 * * * *` | Every 15 minutes (cache warming) |
-| `0 * * * *` | Every hour |
-| `0 0 * * *` | Every day at midnight |
-| `0 */6 * * *` | Every 6 hours |
-| `0 0 1 * *` | First day of every month at midnight (district sync) |
+| Service | Image | Port | Purpose |
+|---------|-------|------|---------|
+| redis | redis:alpine | 6379 | Caching |
+| postgres | postgres:16-alpine | 5432 | Database |
+| seq | datalust/seq:2024.1 | 5341 | Log viewer |
 
 ---
 
@@ -855,21 +964,28 @@ The `CacheWarmingCronSchedule` uses standard cron format:
 
 If you encounter any issues:
 
-1. Check the **Hangfire Dashboard** at `/hangfire` for background job errors
-2. Check the **application logs** in the terminal
-3. Check **Redis logs**: `docker logs traveladvisor-redis`
-4. Check **PostgreSQL logs**: `docker logs traveladvisor-postgres`
-5. Verify **Docker services are running**: `docker ps`
-6. Verify **.NET version**: `dotnet --version` (should be 10.0.x)
+1. Check **Seq** at http://localhost:5341 for error logs
+2. Check the **Hangfire Dashboard** at `/hangfire` for background job errors
+3. Check **application logs** in the terminal or `Logs/` folder
+4. Run **tests** to verify setup: `dotnet test`
+5. Check **Docker services**: `docker ps`
+6. Check **container logs**: `docker logs traveladvisor-redis`
 
-### Database Management
+### Useful Commands
 
-**View districts in PostgreSQL:**
 ```bash
-docker exec -it traveladvisor-postgres psql -U traveladvisor -d traveladvisor -c "SELECT * FROM districts LIMIT 5;"
-```
+# View all logs
+docker-compose logs -f
 
-**Reset database (re-fetch districts on next startup):**
-```bash
+# View API logs only
+docker logs traveladvisor-seq
+
+# Check service health
+curl http://localhost:5155/health
+
+# Run tests with coverage
+dotnet test --collect:"XPlat Code Coverage"
+
+# Reset everything
 docker-compose down -v && docker-compose up -d
 ```
