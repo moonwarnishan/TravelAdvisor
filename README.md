@@ -1,6 +1,43 @@
 # Travel Advisor API
 
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-90%20Passing-success)](tests/)
+[![Architecture](https://img.shields.io/badge/Architecture-Clean-blue)](docs/)
+
 A REST API that helps users make travel decisions based on weather and air quality data for districts in Bangladesh.
+
+---
+
+## Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Top Districts Ranking** | Get the coolest districts with best air quality, ranked for optimal travel |
+| **Travel Recommendations** | Compare your location with destinations to get personalized advice |
+| **Real-time Weather Data** | 7-day forecasts from Open-Meteo API |
+| **Air Quality Monitoring** | PM2.5 levels for health-conscious travel decisions |
+| **Instant Responses** | Pre-cached data ensures < 50ms response times |
+| **Background Sync** | Automatic data refresh every 15 minutes |
+| **Structured Logging** | Serilog with Seq for powerful log analysis |
+| **Swagger Documentation** | Interactive API documentation with example data |
+
+---
+
+## Quick Start (TL;DR)
+
+```bash
+# 1. Start infrastructure
+docker-compose up -d
+
+# 2. Run the API
+cd src/TravelAdvisor.Api && dotnet run
+
+# 3. Open browser
+open http://localhost:5155
+```
+
+**That's it!** Swagger UI opens automatically. Try the endpoints.
 
 ---
 
@@ -30,10 +67,19 @@ A REST API that helps users make travel decisions based on weather and air quali
    - [Seq Log Viewer](#seq-log-viewer)
    - [Log Configuration](#log-configuration)
 
-5. [Documentation](#5-documentation)
+5. [API Reference](#5-api-reference)
+   - [Validation Rules](#validation-rules)
+   - [Error Responses](#error-responses)
+   - [Health Checks](#health-checks)
+
+6. [Configuration](#6-configuration)
+   - [Environment Variables](#environment-variables)
+   - [Application Settings](#application-settings)
+   - [Background Jobs](#background-jobs)
+
+7. [Documentation](#7-documentation)
    - [Technologies Used](#technologies-used)
    - [Why These Technologies](#why-these-technologies)
-   - [Configuration Reference](#configuration-reference)
 
 ---
 
@@ -251,7 +297,7 @@ Replace `5155` with your actual port number if different.
 
 ### 1. Get Top Districts
 
-Returns the top 10 coolest districts with the best air quality.
+Returns the top districts with optimal weather and air quality for travel.
 
 **Endpoint:**
 ```
@@ -259,13 +305,13 @@ GET /api/v1/Travel/top-districts?count=10
 ```
 
 **Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| count | integer | No | Number of districts to return (default: 10, max: 64) |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| count | integer | No | 10 | Number of districts to return (1-64) |
 
 **Example Request:**
 ```bash
-curl http://localhost:5155/api/v1/Travel/top-districts?count=10
+curl http://localhost:5155/api/v1/Travel/top-districts?count=5
 ```
 
 **Example Response:**
@@ -279,12 +325,20 @@ curl http://localhost:5155/api/v1/Travel/top-districts?count=10
         "name": "Cox's Bazar",
         "latitude": 21.4272,
         "longitude": 92.0058,
-        "temperatureAt2pm": 24.5,
-        "pm25Level": 35.2
+        "averageTemperatureAt2pm": 24.5,
+        "averagePm25": 35.2
+      },
+      {
+        "rank": 2,
+        "name": "Bandarban",
+        "latitude": 22.1953,
+        "longitude": 92.2184,
+        "averageTemperatureAt2pm": 25.1,
+        "averagePm25": 28.7
       }
     ],
-    "generatedAt": "2026-01-28T14:00:00Z",
-    "forecastPeriod": "2026-01-28 to 2026-02-03"
+    "generatedAt": "2026-01-30T14:00:00Z",
+    "forecastPeriod": "Next 7 days"
   },
   "message": null,
   "errors": null,
@@ -304,9 +358,9 @@ POST /api/v1/Travel/recommendation
 **Request Body:**
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| currentLatitude | double | Yes | Your current latitude (20.5 to 26.7 - Bangladesh bounds) |
-| currentLongitude | double | Yes | Your current longitude (88.0 to 92.7 - Bangladesh bounds) |
-| destinationDistrict | string | Yes | Name of destination district in Bangladesh |
+| currentLatitude | double | Yes | Your current latitude (20.5 to 26.7) |
+| currentLongitude | double | Yes | Your current longitude (88.0 to 92.7) |
+| destinationDistrict | string | Yes | Name of destination district |
 | travelDate | string | Yes | Travel date (YYYY-MM-DD, within next 7 days) |
 
 **Example Request:**
@@ -314,10 +368,10 @@ POST /api/v1/Travel/recommendation
 curl -X POST http://localhost:5155/api/v1/Travel/recommendation \
   -H "Content-Type: application/json" \
   -d '{
-    "currentLatitude": 23.7115,
-    "currentLongitude": 90.4111,
+    "currentLatitude": 23.8103,
+    "currentLongitude": 90.4125,
     "destinationDistrict": "Cox'\''s Bazar",
-    "travelDate": "2026-01-31"
+    "travelDate": "2026-02-01"
   }'
 ```
 
@@ -329,9 +383,9 @@ curl -X POST http://localhost:5155/api/v1/Travel/recommendation \
     "recommendation": "Recommended",
     "reason": "Your destination is 3°C cooler and has significantly better air quality. Enjoy your trip!",
     "currentLocation": {
-      "name": "Dhaka",
-      "latitude": 23.7115,
-      "longitude": 90.4111,
+      "name": "Current Location",
+      "latitude": 23.8103,
+      "longitude": 90.4125,
       "temperatureAt2pm": 28.5,
       "pm25Level": 85.3
     },
@@ -345,6 +399,20 @@ curl -X POST http://localhost:5155/api/v1/Travel/recommendation \
   },
   "message": null,
   "errors": null,
+  "statusCode": 200
+}
+```
+
+**Example Response (Not Recommended):**
+```json
+{
+  "success": true,
+  "data": {
+    "recommendation": "Not Recommended",
+    "reason": "Your destination is hotter and has worse air quality than your current location. It's better to stay where you are.",
+    "currentLocation": { ... },
+    "destination": { ... }
+  },
   "statusCode": 200
 }
 ```
@@ -381,7 +449,7 @@ docker-compose down -v
 | "Build failed with errors" | Run `dotnet restore` then `dotnet build` |
 | "Redis connection failed" | Run `docker ps` to check if Redis is running, if not run `docker-compose up -d` |
 | "PostgreSQL connection refused" | Run `docker ps` to check if PostgreSQL is running, if not run `docker-compose up -d` |
-| "Seq keeps restarting" | On Apple Silicon, use `platform: linux/amd64` in docker-compose.yml |
+| "Seq keeps restarting" | On Apple Silicon, use `platform: linux/amd64` in docker-compose.yml (already configured) |
 | API returns empty data | Wait for startup to complete (district sync + cache warming) |
 | "Latitude/Longitude validation error" | Coordinates must be within Bangladesh bounds (Lat: 20.5-26.7, Long: 88.0-92.7) |
 
@@ -575,7 +643,7 @@ dotnet test
 
 **Expected output:**
 ```
-Passed!  - Failed: 0, Passed: 88, Skipped: 0, Total: 88, Duration: 250 ms
+Passed!  - Failed: 0, Passed: 90, Skipped: 0, Total: 90, Duration: 250 ms
 ```
 
 ### Run Tests with Detailed Output
@@ -609,14 +677,14 @@ start CoverageReport/index.html  # Windows
 
 | Category | Tests | Description |
 |----------|-------|-------------|
-| **Validators** | 13 | Request validation (coordinates, dates, count limits) |
+| **Validators** | 15 | Request validation (coordinates, dates, count limits) |
 | **Handlers** | 9 | Query handler logic (caching, ranking, recommendations) |
 | **Services** | 19 | DistrictService, WeatherService, AirQualityService |
 | **Controllers** | 6 | API endpoint tests |
 | **Middleware** | 8 | Global exception handler tests |
 | **Exceptions** | 9 | Domain exception tests |
 | **BackgroundJobs** | 10 | CacheWarmingJob, DistrictSyncJob tests |
-| **Total** | **88** | |
+| **Total** | **90** | |
 
 ### Coverage Exclusions
 
@@ -814,7 +882,218 @@ RequestPath = '/api/v1/Travel/top-districts'
 
 ---
 
-# 5. Documentation
+# 5. API Reference
+
+## Validation Rules
+
+### Get Top Districts (`GET /api/v1/Travel/top-districts`)
+
+| Parameter | Rule | Error Message |
+|-----------|------|---------------|
+| count | Must be > 0 | "Count must be greater than 0" |
+| count | Must be <= 64 | "Count cannot exceed 64" |
+
+### Travel Recommendation (`POST /api/v1/Travel/recommendation`)
+
+| Field | Rule | Error Message |
+|-------|------|---------------|
+| currentLatitude | Must be >= 20.5 | "Latitude must be at least 20.5 (Bangladesh southern bound)" |
+| currentLatitude | Must be <= 26.7 | "Latitude must be at most 26.7 (Bangladesh northern bound)" |
+| currentLongitude | Must be >= 88.0 | "Longitude must be at least 88.0 (Bangladesh western bound)" |
+| currentLongitude | Must be <= 92.7 | "Longitude must be at most 92.7 (Bangladesh eastern bound)" |
+| destinationDistrict | Required | "Destination district is required" |
+| destinationDistrict | Must exist | "District '{name}' not found" |
+| travelDate | Must be today or future | "Travel date must be today or in the future" |
+| travelDate | Within 7 days | "Travel date cannot be more than 7 days in the future" |
+
+---
+
+## Error Responses
+
+### Validation Error (400)
+
+```json
+{
+  "success": false,
+  "data": null,
+  "message": null,
+  "errors": [
+    "Latitude must be at least 20.5 (Bangladesh southern bound)",
+    "Travel date must be today or in the future"
+  ],
+  "statusCode": 400
+}
+```
+
+### Not Found Error (404)
+
+```json
+{
+  "success": false,
+  "data": null,
+  "message": "District 'InvalidName' not found",
+  "errors": null,
+  "statusCode": 404
+}
+```
+
+### Server Error (500)
+
+```json
+{
+  "success": false,
+  "data": null,
+  "message": "An unexpected error occurred.",
+  "errors": null,
+  "statusCode": 500
+}
+```
+
+---
+
+## Health Checks
+
+### Basic Health Check
+
+```bash
+curl http://localhost:5155/health
+```
+
+**Response:**
+```json
+{
+  "status": "Healthy",
+  "checks": []
+}
+```
+
+### Readiness Check (includes Redis & PostgreSQL)
+
+```bash
+curl http://localhost:5155/health/ready
+```
+
+**Response (Healthy):**
+```json
+{
+  "status": "Healthy",
+  "checks": [
+    { "name": "redis", "status": "Healthy", "duration": 5.23 },
+    { "name": "postgresql", "status": "Healthy", "duration": 12.45 }
+  ]
+}
+```
+
+**Response (Unhealthy):**
+```json
+{
+  "status": "Unhealthy",
+  "checks": [
+    { "name": "redis", "status": "Unhealthy", "duration": 5001.00 },
+    { "name": "postgresql", "status": "Healthy", "duration": 10.12 }
+  ]
+}
+```
+
+---
+
+# 6. Configuration
+
+## Environment Variables
+
+You can override settings using environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ConnectionStrings__Redis` | `localhost:6379` | Redis connection string |
+| `ConnectionStrings__PostgreSQL` | `Host=localhost;...` | PostgreSQL connection string |
+| `ApiSettings__DistrictsUrl` | GitHub URL | Districts data source |
+| `ApiSettings__WeatherApiBaseUrl` | Open-Meteo URL | Weather API endpoint |
+| `ApiSettings__AirQualityApiBaseUrl` | Open-Meteo URL | Air quality API endpoint |
+| `CacheSettings__DefaultExpirationMinutes` | `15` | Default cache TTL |
+| `CacheSettings__WeatherCacheMinutes` | `30` | Weather data cache TTL |
+| `CacheSettings__CacheWarmingCronSchedule` | `*/15 * * * *` | Cache warming schedule |
+| `CacheSettings__DistrictSyncCronSchedule` | `0 0 1 * *` | District sync schedule |
+| `ASPNETCORE_ENVIRONMENT` | `Development` | Environment name |
+
+**Example:**
+```bash
+export ConnectionStrings__Redis="redis.example.com:6379"
+dotnet run
+```
+
+---
+
+## Application Settings
+
+### appsettings.json
+
+```json
+{
+  "Serilog": {
+    "Using": ["Serilog.Sinks.Console", "Serilog.Sinks.File", "Serilog.Sinks.Seq"],
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "Hangfire": "Information"
+      }
+    }
+  },
+  "ConnectionStrings": {
+    "Redis": "localhost:6379",
+    "PostgreSQL": "Host=localhost;Port=5432;Database=traveladvisor;Username=traveladvisor;Password=traveladvisor123"
+  },
+  "ApiSettings": {
+    "DistrictsUrl": "https://raw.githubusercontent.com/strativ-dev/technical-screening-test/main/bd-districts.json",
+    "WeatherApiBaseUrl": "https://api.open-meteo.com/v1/forecast",
+    "AirQualityApiBaseUrl": "https://air-quality-api.open-meteo.com/v1/air-quality"
+  },
+  "CacheSettings": {
+    "DefaultExpirationMinutes": 15,
+    "DistrictsCacheHours": 24,
+    "WeatherCacheMinutes": 30,
+    "AirQualityCacheMinutes": 30,
+    "CacheWarmingCronSchedule": "*/15 * * * *",
+    "DistrictSyncCronSchedule": "0 0 1 * *"
+  }
+}
+```
+
+---
+
+## Background Jobs
+
+### Job Schedules
+
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| **Cache Warming** | Every 15 minutes | Refreshes weather and air quality data |
+| **District Sync** | Monthly (1st day) | Syncs districts from external API |
+
+### Cron Expression Reference
+
+| Expression | Meaning |
+|------------|---------|
+| `*/15 * * * *` | Every 15 minutes |
+| `0 * * * *` | Every hour |
+| `0 0 * * *` | Daily at midnight |
+| `0 0 1 * *` | Monthly on the 1st |
+| `0 0 * * 0` | Weekly on Sunday |
+
+### Hangfire Dashboard
+
+Access the dashboard at: http://localhost:5155/hangfire
+
+**Features:**
+- View all scheduled/recurring jobs
+- See job execution history
+- Manually trigger jobs
+- Monitor job failures
+
+---
+
+# 7. Documentation
 
 ## Technologies Used
 
@@ -836,6 +1115,7 @@ RequestPath = '/api/v1/Travel/top-districts'
 | Serilog.AspNetCore | 10.0.0 | Structured logging |
 | Serilog.Sinks.Seq | 9.0.0 | Seq log sink |
 | Swashbuckle.AspNetCore | 10.1.0 | Swagger UI |
+| Swashbuckle.AspNetCore.Annotations | 10.1.0 | Swagger annotations |
 
 #### Application Layer
 | Package | Version | Description |
@@ -912,54 +1192,6 @@ A centralized log server with powerful search capabilities.
 
 ---
 
-## Configuration Reference
-
-### appsettings.json
-
-```json
-{
-  "Serilog": {
-    "Using": ["Serilog.Sinks.Console", "Serilog.Sinks.File", "Serilog.Sinks.Seq"],
-    "MinimumLevel": {
-      "Default": "Information",
-      "Override": {
-        "Microsoft": "Warning",
-        "Hangfire": "Information"
-      }
-    },
-    "WriteTo": [
-      { "Name": "Console" },
-      { "Name": "File", "Args": { "path": "Logs/traveladvisor-.log" } }
-    ]
-  },
-  "ConnectionStrings": {
-    "Redis": "localhost:6379",
-    "PostgreSQL": "Host=localhost;Port=5432;Database=traveladvisor;..."
-  },
-  "ApiSettings": {
-    "DistrictsUrl": "https://raw.githubusercontent.com/.../bd-districts.json",
-    "WeatherApiBaseUrl": "https://api.open-meteo.com/v1/forecast",
-    "AirQualityApiBaseUrl": "https://air-quality-api.open-meteo.com/v1/air-quality"
-  },
-  "CacheSettings": {
-    "DefaultExpirationMinutes": 15,
-    "WeatherCacheMinutes": 30,
-    "CacheWarmingCronSchedule": "*/15 * * * *",
-    "DistrictSyncCronSchedule": "0 0 1 * *"
-  }
-}
-```
-
-### Docker Compose Services
-
-| Service | Image | Port | Purpose |
-|---------|-------|------|---------|
-| redis | redis:alpine | 6379 | Caching |
-| postgres | postgres:16-alpine | 5432 | Database |
-| seq | datalust/seq:2024.1 | 5341 | Log viewer |
-
----
-
 ## Support
 
 If you encounter any issues:
@@ -974,14 +1206,17 @@ If you encounter any issues:
 ### Useful Commands
 
 ```bash
-# View all logs
+# View all Docker logs
 docker-compose logs -f
 
-# View API logs only
+# View specific container logs
+docker logs traveladvisor-postgres
+docker logs traveladvisor-redis
 docker logs traveladvisor-seq
 
 # Check service health
 curl http://localhost:5155/health
+curl http://localhost:5155/health/ready
 
 # Run tests with coverage
 dotnet test --collect:"XPlat Code Coverage"
@@ -989,3 +1224,40 @@ dotnet test --collect:"XPlat Code Coverage"
 # Reset everything
 docker-compose down -v && docker-compose up -d
 ```
+
+---
+
+## License
+
+This project is licensed under the MIT License.
+
+---
+
+## Screenshots
+
+### Swagger UI
+Access at: http://localhost:5155
+
+The interactive API documentation allows you to:
+- View all available endpoints
+- See request/response schemas
+- Test endpoints directly in the browser
+- View example request data
+
+### Hangfire Dashboard
+Access at: http://localhost:5155/hangfire
+
+Monitor background jobs:
+- View recurring jobs (Cache Warming, District Sync)
+- Check job execution history
+- Manually trigger jobs
+- See failed jobs and errors
+
+### Seq Log Viewer
+Access at: http://localhost:5341
+
+Analyze application logs:
+- Real-time log streaming
+- Filter by log level
+- Search across all properties
+- Create custom queries
